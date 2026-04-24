@@ -1,6 +1,3 @@
-Perfecto, aquí lo tienes con el formato exacto que necesitas para GitHub:
-
----
 
 # erasmus-sds-2026
 
@@ -146,8 +143,3 @@ Furkan
 
 ---
 
-Si quieres dejarlo perfecto para máxima nota, el siguiente paso sería añadir justo debajo:
-
-## Installation Manual
-
-y te lo preparo también listo para pegar.
