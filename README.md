@@ -49,7 +49,7 @@ The system will generate a personalized travel plan including interesting places
 
 David Alonso
 Matija Faukovic
-Furkan
+Furkan Toprak
 
 #### Responsibilities
 
