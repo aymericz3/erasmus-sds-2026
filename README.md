@@ -17,7 +17,7 @@ The system will generate a personalized travel plan including interesting places
 
 ## Roles and Responsibilities
 
-### Product Owner – Aymeric Zaluski
+### Product Owner – Matija Faukovic
 
 * Create and maintain the Product Backlog (features, requirements, acceptance criteria)
 * Define user needs based on traveler profiles (e.g., culture, sport, family, art) 
@@ -48,7 +48,7 @@ The system will generate a personalized travel plan including interesting places
 ### Developers
 
 David Alonso
-Matija Faukovic
+Aymeric Zaluski
 Furkan Toprak
 
 #### Responsibilities
