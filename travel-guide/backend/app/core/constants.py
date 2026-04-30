@@ -1,0 +1,1 @@
+CATEGORIES = ["landmark", "sport", "culture", "art", "outdoor", "family", "hotel", "food"]

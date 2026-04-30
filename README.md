@@ -143,3 +143,23 @@ Furkan Toprak
 
 ---
 
+## Getting Started
+
+### Backend
+
+```bash
+cd travel-guide/backend
+
+# Create a virtual environment
+python3 -m venv .venv
+
+# Activate it
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the development server
+uvicorn app.main:app --reload
+```
+
