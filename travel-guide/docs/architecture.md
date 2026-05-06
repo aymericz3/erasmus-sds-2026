@@ -9,7 +9,7 @@ A web application that lets users discover places in Poznań and plan trips, wit
 ## Stack
 
 ```
-Browser (HTML/JS)
+Browser (React + Vite)
     ↓  REST API over HTTP
 FastAPI (Python)
     ↓  SQL
@@ -20,14 +20,14 @@ PostgreSQL
 
 ## Frontend
 
-Plain HTML/CSS/JavaScript. No frameworks to keep it simple and focus on core concepts.
+React 19 with Vite as the build tool and dev server. Component-based UI, no routing library — page navigation is handled via `useState`.
 
 **Features:**
-- Place listing
-- Category filters
-- Itinerary view and map display (in future)
+- Category filter selection
+- Place listing with select/deselect
+- Itinerary generation (planned)
 
-Communicates with the backend exclusively through `fetch()` calls to the REST API.
+Will communicate with the backend through `fetch()` calls to the REST API.
 
 ---
 
@@ -43,28 +43,24 @@ Handles request routing, business logic, and all database interactions. Returns 
 |--------|----------|-------------|
 | GET | `/places` | List all places |
 | GET | `/places?category=art` | Filter by category |
-| GET | `/itinerary` | Generate an itinerary |
+| GET | `/categories` | List available categories |
 
 ---
 
 ## Database
 
-PostgreSQL. Main entities: `Place`, `Category`, `Itinerary`.
+PostgreSQL. Main entity: `Place`.
 
 **`places` table:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | id | INTEGER | Primary key |
-| name | TEXT | Place name |
-| category | TEXT | art, sport, family… |
-| latitude | FLOAT | Coordinates |
-| longitude | FLOAT | Coordinates |
+| name_en | TEXT | Place name in English (nullable) |
+| name_pl | TEXT | Place name in Polish (nullable) |
+| category | TEXT | landmark, sport, culture, art, outdoor, family, hotel, food |
 | description | TEXT | Short description |
-| image_url | TEXT | URL to an image |
 | opening_hours | TEXT | e.g., "9am-5pm" |
-| price_range | TEXT | e.g., "$", "$$" |
-| rating | INTEGER | tour guide rating (1-5) |
 
 ---
 
@@ -83,23 +79,29 @@ PostgreSQL. Main entities: `Place`, `Category`, `Itinerary`.
 ```
 travel-guide/
 ├── frontend/
-│   ├── public/
+│   ├── index.html         # Vite entry point
+│   ├── vite.config.js
+│   ├── package.json
+│   ├── eslint.config.js
+│   ├── public/            # static assets (favicon, icons)
 │   └── src/
-│       ├── assets/        # images, icons
-│       ├── components/    # reusable UI components
+│       ├── App.jsx        # root component, page routing via useState
+│       ├── main.jsx       # React DOM entry point
+│       ├── index.css
+│       ├── assets/
+│       ├── components/
 │       ├── pages/
-│       ├── services/      # API calls
-│       └── main.js
+│       └── services/      # API calls (future)
 │
 ├── backend/
 │   └── app/
 │       ├── main.py        # entry point
-│       ├── routes/        # places.py, itinerary.py
+│       ├── routes/        # places.py, categories.py
 │       ├── models/        # ORM models
 │       ├── schemas/       # request/response validation
 │       ├── services/      # business logic
 │       ├── db/            # session.py
-│       └── core/          # config, settings
+│       └── core/          # config, constants
 │
 ├── database/
 │   ├── schema.sql
@@ -107,8 +109,7 @@ travel-guide/
 │
 ├── docs/
 │   ├── user-stories.md
-│   ├── architecture.md
-│   └── api-spec.md
+│   └── architecture.md
 │
 └── README.md
 ```
