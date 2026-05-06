@@ -145,21 +145,57 @@ Furkan Toprak
 
 ## Getting Started
 
-### Backend
+### 1. Prerequisites
+
+- Python 3.11+
+- PostgreSQL (install via `brew install postgresql@16` on macOS)
+
+---
+
+### 2. Database setup
+
+```bash
+# Start PostgreSQL (macOS)
+brew services start postgresql@16
+
+# Create the database
+createdb travel_guide
+
+# Run schema then seed (from repo root)
+psql -d travel_guide -f travel-guide/database/schema.sql
+psql -d travel_guide -f travel-guide/database/seed.sql
+
+# Verify — should show 5 rows (press q to exit)
+psql -d travel_guide -c "SELECT id, name_en, category FROM places LIMIT 5;"
+```
+
+---
+
+### 3. Backend setup
 
 ```bash
 cd travel-guide/backend
 
-# Create a virtual environment
+# Create and activate a virtual environment
 python3 -m venv .venv
-
-# Activate it
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
+# Create your local .env (only needed if your DB setup differs)
+echo "DATABASE_URL=postgresql://localhost/travel_guide" > .env
+
 # Run the development server
 uvicorn app.main:app --reload
 ```
+
+The API is now available at http://localhost:8000
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | Health check |
+| `GET /places` | All places |
+| `GET /places?category=art` | Filter by category |
+| `GET /categories` | List all categories |
 
