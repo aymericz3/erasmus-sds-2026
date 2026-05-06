@@ -4,5 +4,5 @@ CREATE TABLE IF NOT EXISTS places (
     name_pl       TEXT,
     category      TEXT NOT NULL,
     description   TEXT,
-    opening_hours TEXT,
+    opening_hours TEXT
 );
