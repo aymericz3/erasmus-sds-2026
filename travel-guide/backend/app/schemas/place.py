@@ -13,5 +13,10 @@ class PlaceOut(BaseModel):
     category:      str
     description:   Optional[str] = None
     opening_hours: Optional[str] = None
+    duration:      Optional[str] = None
+    price_range:   Optional[str] = None
+    image_url:     Optional[str] = None
+    latitude:      Optional[float] = None
+    longitude:     Optional[float] = None
 
     model_config = {"from_attributes": True}
