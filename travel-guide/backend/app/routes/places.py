@@ -12,10 +12,12 @@ from app.services.place_service import get_places
 
 router = APIRouter()
 
-# List places with an optional category filter
+# List places with an optional comma-separated categories filter
+# Examples: /places  /places?categories=art  /places?categories=art,sport
 @router.get("/places", response_model=list[PlaceOut])
 def list_places(
-    category: Optional[str] = Query(default=None),
+    categories: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    return get_places(db, category=category)
+    category_list = [c.strip() for c in categories.split(",")] if categories else None
+    return get_places(db, categories=category_list)

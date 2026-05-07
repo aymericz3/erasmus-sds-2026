@@ -42,7 +42,8 @@ Handles request routing, business logic, and all database interactions. Returns 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/places` | List all places |
-| GET | `/places?category=art` | Filter by category |
+| GET | `/places?categories=art` | Filter by one category |
+| GET | `/places?categories=art,sport` | Filter by multiple categories |
 | GET | `/categories` | List available categories |
 
 ---
