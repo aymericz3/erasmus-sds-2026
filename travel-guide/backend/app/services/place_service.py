@@ -7,9 +7,9 @@ from typing import Optional
 
 from app.models.place import Place
 
-# Get places with an optional category filter
-def get_places(db: Session, category: Optional[str] = None) -> list[Place]:
+# Get places with an optional list of category filters
+def get_places(db: Session, categories: Optional[list[str]] = None) -> list[Place]:
     query = db.query(Place)
-    if category:
-        query = query.filter(Place.category == category)
+    if categories:
+        query = query.filter(Place.category.in_(categories))
     return query.all()
