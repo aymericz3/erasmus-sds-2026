@@ -15,3 +15,8 @@ class Place(Base):
     category      = Column(Text, nullable=False)
     description   = Column(Text)
     opening_hours = Column(Text)
+    duration      = Column(Text)
+    price_range   = Column(Text)
+    image_url     = Column(Text)
+    latitude      = Column(Float)
+    longitude     = Column(Float)
