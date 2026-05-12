@@ -1,4 +1,4 @@
-    """
+"""
 Main application file for the Travel Guide backend.
 """
 
