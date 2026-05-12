@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const categories = [
   "Culture",
@@ -11,40 +11,42 @@ const categories = [
   "Architecture",
 ];
 
-const attractionsData = [
-  {
-    id: 1,
-    name: "Old Market Square",
-    description: "Historic heart of the city with colorful merchant houses and vibrant atmosphere.",
-    categories: ["Culture", "History"],
-    duration: "1h 30m",
-    location: "City Center",
-    image: "https://images.unsplash.com/photo-1607427293702-036933bbf746?q=80&w=1200",
-  },
-  {
-    id: 2,
-    name: "Imperial Castle",
-    description: "Impressive neo-Romanesque castle built in the early 20th century.",
-    categories: ["History", "Architecture"],
-    duration: "2h",
-    location: "City Center",
-    image: "https://images.unsplash.com/photo-1519197924294-4ba991a11128?q=80&w=1200",
-  },
-  {
-    id: 3,
-    name: "Cathedral Island",
-    description: "Ancient religious complex with beautiful historical architecture.",
-    categories: ["Culture", "History"],
-    duration: "1h 15m",
-    location: "City Center",
-    image: "https://images.unsplash.com/photo-1518005020951-eccb494ad742?q=80&w=1200",
-  },
-];
+const categoryMap = {
+  landmark: "History",
+  sport: "Sports",
+  culture: "Culture",
+  outdoor: "Nature",
+  family: "Family",
+  food: "Food",
+  art: "Art",
+  hotel: "Architecture"
+};
 
 function App() {
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [page, setPage] = useState("home");
   const [selectedAttractions, setSelectedAttractions] = useState([]);
+  const [attractions, setAttractions] = useState([]);
+
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    
+    fetch(`${apiUrl}/places`)
+      .then((response) => response.json())
+      .then((data) => {
+        const formattedData = data.map((item) => ({
+          id: item.id,
+          name: item.name_en || item.name_pl,
+          description: item.description,
+          categories: [categoryMap[item.category] || "Culture"],
+          duration: item.duration || "1h",
+          location: "City Center",
+          image: item.image_url,
+        }));
+        setAttractions(formattedData);
+      })
+      .catch((error) => console.error(error));
+}, []);
 
   const toggleCategory = (category) => {
     if (selectedCategories.includes(category)) {
@@ -60,8 +62,8 @@ function App() {
 
   const filteredAttractions =
     selectedCategories.length === 0
-      ? attractionsData
-      : attractionsData.filter((attraction) =>
+      ? attractions
+      : attractions.filter((attraction) =>
           attraction.categories.some((category) =>
             selectedCategories.includes(category)
           )
@@ -130,7 +132,7 @@ function App() {
       {page === "results" && (
         <section className="results">
           <button className="back" onClick={() => setPage("home")}>
-            ← Back to Categories
+            Back to Categories
           </button>
 
           <div className="results-header">
@@ -202,11 +204,11 @@ function App() {
       {page === "itinerary" && (
         <section className="itinerary">
           <button className="back" onClick={() => setPage("results")}>
-            ← Back to Attractions
+            Back to Attractions
           </button>
 
           <h1>Your Travel Itinerary</h1>
-          <p>This is your selected visit plan for Poznań.</p>
+          <p>This is your selected visit plan for Poznan.</p>
 
           <div className="itinerary-list">
             {selectedAttractions.map((attraction, index) => (
