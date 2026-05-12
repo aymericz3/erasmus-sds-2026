@@ -132,7 +132,7 @@ function App() {
       {page === "results" && (
         <section className="results">
           <button className="back" onClick={() => setPage("home")}>
-            ← Back to Categories
+            Back to Categories
           </button>
 
           <div className="results-header">
@@ -204,11 +204,11 @@ function App() {
       {page === "itinerary" && (
         <section className="itinerary">
           <button className="back" onClick={() => setPage("results")}>
-            ← Back to Attractions
+            Back to Attractions
           </button>
 
           <h1>Your Travel Itinerary</h1>
-          <p>This is your selected visit plan for Poznań.</p>
+          <p>This is your selected visit plan for Poznan.</p>
 
           <div className="itinerary-list">
             {selectedAttractions.map((attraction, index) => (
