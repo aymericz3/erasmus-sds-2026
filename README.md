@@ -199,3 +199,13 @@ The API is now available at http://localhost:8000
 | `GET /places?category=art` | Filter by category |
 | `GET /categories` | List all categories |
 
+### 4. Frontend setup
+
+```bash
+cd travel-guide/backend
+
+# Create your local .env
+echo "VITE_API_URL=http://127.0.0.1:8000" > .env
+
+# Runs the frontend
+npm run dev
