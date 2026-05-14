@@ -207,9 +207,22 @@ function App() {
           </div>
  
           <div className="filters">
-            <button className="category active">All</button>
-            {selectedCategories.map((category) => (
-              <button key={category} className="category">
+            <button
+              className={allSelected ? "category active" : "category"}
+              onClick={toggleAll}
+            >
+              All
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category}
+                className={
+                  selectedCategories.includes(category)
+                    ? "category active"
+                    : "category"
+                }
+                onClick={() => toggleCategory(category)}
+              >
                 {category}
               </button>
             ))}
