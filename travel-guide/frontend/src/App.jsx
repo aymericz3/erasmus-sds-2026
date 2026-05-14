@@ -58,8 +58,14 @@ function App() {
     }
   };
  
-  const selectAllCategories = () => {
-    setSelectedCategories(categories);
+  const allSelected = selectedCategories.length === categories.length;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedCategories([]);
+    } else {
+      setSelectedCategories(categories);
+    }
   };
  
   const filteredAttractions =
@@ -149,6 +155,12 @@ function App() {
             <p>Choose categories that match your travel style</p>
  
             <div className="categories">
+              <button
+                className={allSelected ? "category active" : "category"}
+                onClick={toggleAll}
+              >
+                All
+              </button>
               {categories.map((category) => (
                 <button
                   key={category}
@@ -163,12 +175,8 @@ function App() {
                 </button>
               ))}
             </div>
- 
+
             <div className="actions">
-              <button className="secondary" onClick={selectAllCategories}>
-                Select All
-              </button>
- 
               <button className="primary" onClick={() => setPage("results")}>
                 Explore Attractions →
               </button>
@@ -199,9 +207,22 @@ function App() {
           </div>
  
           <div className="filters">
-            <button className="category active">All</button>
-            {selectedCategories.map((category) => (
-              <button key={category} className="category">
+            <button
+              className={allSelected ? "category active" : "category"}
+              onClick={toggleAll}
+            >
+              All
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category}
+                className={
+                  selectedCategories.includes(category)
+                    ? "category active"
+                    : "category"
+                }
+                onClick={() => toggleCategory(category)}
+              >
                 {category}
               </button>
             ))}
