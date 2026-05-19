@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import categories, places
+from app.api.endpoints import itinerary
 
 # Create FastAPI application instance
 app = FastAPI(title="Travel Guide API")
@@ -21,6 +22,7 @@ app.add_middleware(
 # Include API routers for categories and places
 app.include_router(categories.router)
 app.include_router(places.router)
+app.include_router(itinerary.router, prefix="/itinerary", tags=["itinerary"])
 
 # Root endpoint to verify that the API is running
 @app.get("/")
