@@ -13,9 +13,9 @@ const categories = [
 ];
 
 const INTENSITY_OPTIONS = [
-  { key: "relaxed",  label: "Relaxed",  description: "~4h/day · Few attractions, plenty of breaks", maxMinutesPerDay: 240 },
-  { key: "moderate", label: "Moderate", description: "~6h/day · Balanced pace",                     maxMinutesPerDay: 360 },
-  { key: "intense",  label: "Intense",  description: "~8h/day · Packed schedule",                   maxMinutesPerDay: 480 },
+  { key: "relaxed",  label: "Relaxed",  description: "~4h/day · Max 3 attractions + breaks", maxMinutesPerDay: 240, maxAttractionsPerDay: 3 },
+  { key: "moderate", label: "Moderate", description: "~6h/day · Balanced pace",               maxMinutesPerDay: 360, maxAttractionsPerDay: 5 },
+  { key: "intense",  label: "Intense",  description: "~8h/day · Packed schedule",             maxMinutesPerDay: 480, maxAttractionsPerDay: null },
 ];
 
 function parseDurationToMinutes(duration) {
@@ -52,7 +52,11 @@ function buildDailyItinerary(attractions, numDays, intensityKey) {
 
   for (const attraction of attractions) {
     const duration = parseDurationToMinutes(attraction.duration);
-    const dayIndex = days.findIndex((day) => day.totalMinutes + duration <= maxMinPerDay);
+    const dayIndex = days.findIndex((day) =>
+      day.totalMinutes + duration <= maxMinPerDay &&
+      (config.maxAttractionsPerDay === null ||
+        day.attractions.length < config.maxAttractionsPerDay)
+    );
     if (dayIndex !== -1) {
       days[dayIndex].attractions.push(attraction);
       days[dayIndex].totalMinutes += duration;
@@ -440,39 +444,49 @@ function App() {
                 <p className="day-empty">No attractions planned for this day.</p>
               ) : (
                 <div className="itinerary-list">
-                  {day.attractions.map((attraction, i) => (
-                    <div key={attraction.id} className="itinerary-item">
-                      <div className="itinerary-item-info">
-                        <span className="itinerary-item-number">{i + 1}</span>
-                        <div>
-                          <strong>{attraction.name_en || attraction.name_pl}</strong>
-                          <span className="itinerary-item-category">{attraction.category}</span>
+                  {day.attractions.flatMap((attraction, i) => {
+                    const isLast = i === day.attractions.length - 1;
+                    const item = (
+                      <div key={attraction.id} className="itinerary-item">
+                        <div className="itinerary-item-info">
+                          <span className="itinerary-item-number">{i + 1}</span>
+                          <div>
+                            <strong>{attraction.name_en || attraction.name_pl}</strong>
+                            <span className="itinerary-item-category">{attraction.category}</span>
+                          </div>
+                        </div>
+                        <div className="itinerary-item-actions">
+                          <span className="itinerary-item-duration">{attraction.duration}</span>
+                          <div className="reorder-btns">
+                            <button
+                              className="reorder-btn"
+                              onClick={() => moveAttractionInDay(dayIndex, i, "up")}
+                              disabled={i === 0}
+                              title="Move up"
+                            >↑</button>
+                            <button
+                              className="reorder-btn"
+                              onClick={() => moveAttractionInDay(dayIndex, i, "down")}
+                              disabled={i === day.attractions.length - 1}
+                              title="Move down"
+                            >↓</button>
+                          </div>
+                          <button
+                            className="remove-btn"
+                            onClick={() => removeFromItinerary(attraction.id)}
+                            title="Remove"
+                          >×</button>
                         </div>
                       </div>
-                      <div className="itinerary-item-actions">
-                        <span className="itinerary-item-duration">{attraction.duration}</span>
-                        <div className="reorder-btns">
-                          <button
-                            className="reorder-btn"
-                            onClick={() => moveAttractionInDay(dayIndex, i, "up")}
-                            disabled={i === 0}
-                            title="Move up"
-                          >↑</button>
-                          <button
-                            className="reorder-btn"
-                            onClick={() => moveAttractionInDay(dayIndex, i, "down")}
-                            disabled={i === day.attractions.length - 1}
-                            title="Move down"
-                          >↓</button>
-                        </div>
-                        <button
-                          className="remove-btn"
-                          onClick={() => removeFromItinerary(attraction.id)}
-                          title="Remove"
-                        >×</button>
+                    );
+                    const breakSlot = intensity === "relaxed" && !isLast ? (
+                      <div key={`break-${attraction.id}`} className="downtime-slot">
+                        <span>☕ Break</span>
+                        <span>30 min</span>
                       </div>
-                    </div>
-                  ))}
+                    ) : null;
+                    return [item, breakSlot].filter(Boolean);
+                  })}
                 </div>
               )}
             </div>

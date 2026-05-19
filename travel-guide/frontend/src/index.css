@@ -605,6 +605,19 @@ h1 {
 }
 
 /* Overflow block */
+/* Downtime / break slots (#55) */
+.downtime-slot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 24px;
+  background: #f7f7f8;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+  color: #6b6b80;
+  font-style: italic;
+}
+
 .overflow-block {
   margin-top: 16px;
   border: 2px dashed #e0a800;
