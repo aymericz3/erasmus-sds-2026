@@ -1,5 +1,5 @@
 import { CATEGORIES } from "../constants";
-import ResultsMap from "./ResultsMap";
+import ResultsMap from "../components/ResultsMap";
 
 export default function ResultsPage({
   attractions, selectedAttractions, selectedCategories, allCategoriesSelected,
