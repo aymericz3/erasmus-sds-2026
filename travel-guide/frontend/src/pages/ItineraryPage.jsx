@@ -1,6 +1,6 @@
 import { INTENSITY_OPTIONS } from "../constants";
 import { formatMinutes, formatDayDate } from "../utils";
-import ItineraryMap from "./ItineraryMap";
+import ItineraryMap from "../components/ItineraryMap";
 
 export default function ItineraryPage({
   days, overflow, intensity, totalDuration,

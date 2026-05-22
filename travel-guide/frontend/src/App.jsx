@@ -3,9 +3,9 @@ import "leaflet/dist/leaflet.css";
 
 import { CATEGORIES } from "./constants";
 import { parseDurationToMinutes, formatMinutes, buildDailyItinerary } from "./utils";
-import HomePage from "./components/HomePage";
-import ResultsPage from "./components/ResultsPage";
-import ItineraryPage from "./components/ItineraryPage";
+import HomePage from "./pages/HomePage";
+import ResultsPage from "./pages/ResultsPage";
+import ItineraryPage from "./pages/ItineraryPage";
 
 function App() {
   const [selectedCategories, setSelectedCategories] = useState([]);
