@@ -2,10 +2,20 @@ import { useState, useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 
 import { CATEGORIES } from "./constants";
-import { parseDurationToMinutes, formatMinutes, buildDailyItinerary } from "./utils";
+import {
+  parseDurationToMinutes, formatMinutes,
+  buildDailyItinerary, computeDayItems, computeTravelMinutes,
+} from "./utils";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
 import ItineraryPage from "./pages/ItineraryPage";
+
+function totalFromItems(items) {
+  return items.reduce(
+    (s, item) => s + (item.type === "attraction" ? parseDurationToMinutes(item.duration) : item.duration),
+    0
+  );
+}
 
 function App() {
   const [selectedCategories, setSelectedCategories] = useState([]);
@@ -15,6 +25,7 @@ function App() {
   const [arrivalDate, setArrivalDate] = useState("");
   const [numDays, setNumDays] = useState(1);
   const [intensity, setIntensity] = useState("moderate");
+  const [startTime, setStartTime] = useState("09:00");
   const [itineraryDays, setItineraryDays] = useState(null);
 
   useEffect(() => {
@@ -58,13 +69,13 @@ function App() {
     : null;
 
   const generateItinerary = () => {
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity));
+    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime));
     setPage("itinerary");
   };
 
   const changeIntensity = (newIntensity) => {
     setIntensity(newIntensity);
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity));
+    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime));
   };
 
   const moveAttractionInDay = (dayIndex, attractionIndex, dir) => {
@@ -75,9 +86,15 @@ function App() {
       const newAttractions = [...day.attractions];
       [newAttractions[attractionIndex], newAttractions[targetIndex]] =
         [newAttractions[targetIndex], newAttractions[attractionIndex]];
+      const newTravelMinutes = computeTravelMinutes(newAttractions);
+      const newItems = computeDayItems(newAttractions, newTravelMinutes, day.breakDurations, startTime);
       return {
         ...prev,
-        days: prev.days.map((d, i) => (i === dayIndex ? { ...d, attractions: newAttractions } : d)),
+        days: prev.days.map((d, i) =>
+          i === dayIndex
+            ? { ...d, attractions: newAttractions, travelMinutes: newTravelMinutes, items: newItems, totalMinutes: totalFromItems(newItems) }
+            : d
+        ),
       };
     });
   };
@@ -87,14 +104,73 @@ function App() {
     setItineraryDays((prev) => {
       if (!prev) return prev;
       const newDays = prev.days.map((day) => {
+        const attrIndex = day.attractions.findIndex((a) => a.id === attractionId);
+        if (attrIndex === -1) return day;
         const newAttractions = day.attractions.filter((a) => a.id !== attractionId);
-        return {
-          ...day,
-          attractions: newAttractions,
-          totalMinutes: newAttractions.reduce((s, a) => s + parseDurationToMinutes(a.duration), 0),
-        };
+        const newBreakDurations = [...day.breakDurations];
+        if (attrIndex === 0) {
+          newBreakDurations.splice(0, 1);
+        } else if (attrIndex === day.attractions.length - 1) {
+          newBreakDurations.splice(attrIndex - 1, 1);
+        } else {
+          newBreakDurations.splice(attrIndex - 1, 2, null);
+        }
+        const newTravelMinutes = computeTravelMinutes(newAttractions);
+        const newItems = computeDayItems(newAttractions, newTravelMinutes, newBreakDurations, startTime);
+        return { ...day, attractions: newAttractions, travelMinutes: newTravelMinutes, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) };
       });
       return { days: newDays, overflow: prev.overflow.filter((a) => a.id !== attractionId) };
+    });
+  };
+
+  const addBreak = (dayIndex, gapIndex) => {
+    setItineraryDays((prev) => {
+      const day = prev.days[dayIndex];
+      const newBreakDurations = [...day.breakDurations];
+      newBreakDurations[gapIndex] = 30;
+      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
+      return {
+        ...prev,
+        days: prev.days.map((d, i) =>
+          i === dayIndex
+            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
+            : d
+        ),
+      };
+    });
+  };
+
+  const removeBreak = (dayIndex, gapIndex) => {
+    setItineraryDays((prev) => {
+      const day = prev.days[dayIndex];
+      const newBreakDurations = [...day.breakDurations];
+      newBreakDurations[gapIndex] = null;
+      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
+      return {
+        ...prev,
+        days: prev.days.map((d, i) =>
+          i === dayIndex
+            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
+            : d
+        ),
+      };
+    });
+  };
+
+  const changeBreakDuration = (dayIndex, gapIndex, delta) => {
+    setItineraryDays((prev) => {
+      const day = prev.days[dayIndex];
+      const newBreakDurations = [...day.breakDurations];
+      newBreakDurations[gapIndex] = Math.max(15, Math.min(120, (newBreakDurations[gapIndex] ?? 30) + delta));
+      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
+      return {
+        ...prev,
+        days: prev.days.map((d, i) =>
+          i === dayIndex
+            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
+            : d
+        ),
+      };
     });
   };
 
@@ -106,11 +182,13 @@ function App() {
           numDays={numDays}
           departureDate={departureDate}
           intensity={intensity}
+          startTime={startTime}
           selectedCategories={selectedCategories}
           allCategoriesSelected={allCategoriesSelected}
           onArrivalDateChange={setArrivalDate}
           onNumDaysChange={setNumDays}
           onIntensityChange={setIntensity}
+          onStartTimeChange={setStartTime}
           onToggleCategory={toggleCategory}
           onToggleAllCategories={toggleAllCategories}
           onExplore={() => setPage("results")}
@@ -145,6 +223,9 @@ function App() {
           onRegenerate={generateItinerary}
           onMoveAttraction={moveAttractionInDay}
           onRemoveAttraction={removeFromItinerary}
+          onAddBreak={addBreak}
+          onRemoveBreak={removeBreak}
+          onChangeBreakDuration={changeBreakDuration}
         />
       )}
     </div>

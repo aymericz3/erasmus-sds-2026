@@ -27,27 +27,117 @@ export function formatDayDate(arrivalDate, dayIndex) {
   return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 }
 
-export function buildDailyItinerary(attractions, numDays, intensityKey) {
+function timeToMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(total) {
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function recalculateItemTimes(items, startTimeStr) {
+  let current = timeToMinutes(startTimeStr);
+  return items.map((item) => {
+    const duration = item.type === "attraction"
+      ? parseDurationToMinutes(item.duration)
+      : item.duration;
+    const start_at = minutesToTime(current);
+    current += duration;
+    const end_at = minutesToTime(current);
+    return { ...item, start_at, end_at };
+  });
+}
+
+// Haversine distance → walking minutes, rounded UP to nearest 5
+export function haversineMinutes(a1, a2, speedKmh = 5) {
+  if (!a1?.latitude || !a1?.longitude || !a2?.latitude || !a2?.longitude) return 0;
+  const R = 6371;
+  const lat1 = a1.latitude * Math.PI / 180;
+  const lat2 = a2.latitude * Math.PI / 180;
+  const dLat = (a2.latitude - a1.latitude) * Math.PI / 180;
+  const dLon = (a2.longitude - a1.longitude) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const raw = (distKm / speedKmh) * 60;
+  return Math.ceil(raw / 5) * 5;
+}
+
+export function computeTravelMinutes(attractions) {
+  return attractions.slice(0, -1).map((a, i) => haversineMinutes(a, attractions[i + 1]));
+}
+
+// Builds the flat items list for one day, inserting travel and break rows between attractions.
+// travelMinutes[i] = walk time between attraction[i] and attraction[i+1]
+// breakDurations[i] = break duration at gap i, or null if no break
+export function computeDayItems(attractions, travelMinutes, breakDurations, startTime) {
+  const rawItems = [];
+  attractions.forEach((attr, i) => {
+    rawItems.push({ type: "attraction", ...attr });
+    if (i < attractions.length - 1) {
+      const travel = travelMinutes[i] ?? 0;
+      rawItems.push({ type: "travel", id: `travel-${attr.id}`, duration: travel, gapIndex: i });
+      const breakDur = breakDurations[i];
+      if (breakDur != null) {
+        rawItems.push({ type: "break", id: `break-${attr.id}`, duration: breakDur, gapIndex: i });
+      }
+    }
+  });
+  return recalculateItemTimes(rawItems, startTime);
+}
+
+export function buildDailyItinerary(attractions, numDays, intensityKey, startTime = "09:00", breakDurationMinutes = 30) {
   const config = INTENSITY_OPTIONS.find((o) => o.key === intensityKey);
   const maxMinPerDay = config.maxMinutesPerDay;
-  const days = Array.from({ length: numDays }, () => ({ attractions: [], totalMinutes: 0 }));
+  const isRelaxed = intensityKey === "relaxed";
+
+  const days = Array.from({ length: numDays }, () => ({
+    attractions: [],
+    travelMinutes: [],
+    breakDurations: [],
+    items: [],
+    totalMinutes: 0,
+  }));
   const overflow = [];
 
   for (const attraction of attractions) {
     const duration = parseDurationToMinutes(attraction.duration);
-    const dayIndex = days.findIndex((day) =>
-      day.totalMinutes + duration <= maxMinPerDay &&
-      (config.maxAttractionsPerDay === null ||
-        day.attractions.length < config.maxAttractionsPerDay)
-    );
+
+    const dayIndex = days.findIndex((day) => {
+      const last = day.attractions[day.attractions.length - 1];
+      const travel = last ? haversineMinutes(last, attraction) : 0;
+      const breakOverhead = isRelaxed && day.attractions.length > 0 ? breakDurationMinutes : 0;
+      return (
+        day.totalMinutes + travel + breakOverhead + duration <= maxMinPerDay &&
+        (config.maxAttractionsPerDay === null || day.attractions.length < config.maxAttractionsPerDay)
+      );
+    });
+
     if (dayIndex !== -1) {
-      days[dayIndex].attractions.push(attraction);
-      days[dayIndex].totalMinutes += duration;
+      const day = days[dayIndex];
+      if (day.attractions.length > 0) {
+        const last = day.attractions[day.attractions.length - 1];
+        const travel = haversineMinutes(last, attraction);
+        day.travelMinutes.push(travel);
+        day.totalMinutes += travel;
+        day.breakDurations.push(isRelaxed ? breakDurationMinutes : null);
+        if (isRelaxed) day.totalMinutes += breakDurationMinutes;
+      }
+      day.attractions.push(attraction);
+      day.totalMinutes += duration;
     } else {
       overflow.push(attraction);
     }
   }
-  return { days, overflow };
+
+  const daysWithItems = days.map((day) => ({
+    ...day,
+    items: computeDayItems(day.attractions, day.travelMinutes, day.breakDurations, startTime),
+  }));
+
+  return { days: daysWithItems, overflow };
 }
 
 export function createMarkerIcon(color, label) {
