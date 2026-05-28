@@ -2,8 +2,8 @@ import { CATEGORIES, INTENSITY_OPTIONS } from "../constants";
 
 export default function HomePage({
   arrivalDate, numDays, departureDate,
-  intensity, selectedCategories, allCategoriesSelected,
-  onArrivalDateChange, onNumDaysChange, onIntensityChange,
+  intensity, startTime, selectedCategories, allCategoriesSelected,
+  onArrivalDateChange, onNumDaysChange, onIntensityChange, onStartTimeChange,
   onToggleCategory, onToggleAllCategories, onExplore,
 }) {
   return (
@@ -30,9 +30,16 @@ export default function HomePage({
               onChange={(e) => onNumDaysChange(Math.max(1, parseInt(e.target.value) || 1))}
             />
           </div>
+          <div className="stay-field">
+            <label htmlFor="start-time">Daily start time</label>
+            <input
+              id="start-time" type="time" value={startTime}
+              onChange={(e) => onStartTimeChange(e.target.value)}
+            />
+          </div>
           {arrivalDate && (
             <div className="stay-summary">
-              {arrivalDate} → {departureDate} · {numDays} {numDays === 1 ? "day" : "days"}
+              {arrivalDate} → {departureDate} · {numDays} {numDays === 1 ? "day" : "days"} · starts at {startTime}
             </div>
           )}
         </div>
