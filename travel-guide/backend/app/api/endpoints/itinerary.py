@@ -10,20 +10,23 @@ router = APIRouter()
 @router.post("/plan")
 async def create_plan(request: ItineraryRequest, db: Session = Depends(get_db)):
     places = db.query(Place).filter(Place.id.in_(request.place_ids)).all()
-    
+
     if not places:
         raise HTTPException(status_code=404, detail="No places found for given IDs")
 
-    optimized_plan = schedule_itinerary(places, request.total_minutes)
+    items = schedule_itinerary(
+        places,
+        request.total_minutes,
+        start_time=request.start_time,
+        break_duration_minutes=request.break_duration_minutes,
+        intensity=request.intensity,
+    )
 
+    scheduled = [i for i in items if i["type"] == "attraction"]
     return {
         "total_minutes": request.total_minutes,
-        "scheduled_places": [
-            {
-                "id": p.id, 
-                "name": p.name_en or p.name_pl, 
-                "duration": p.duration
-            } for p in optimized_plan
-        ],
-        "count": len(optimized_plan)
+        "start_time": request.start_time,
+        "intensity": request.intensity,
+        "items": items,
+        "count": len(scheduled),
     }
