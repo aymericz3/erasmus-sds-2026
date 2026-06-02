@@ -1,10 +1,10 @@
-import { CATEGORIES, INTENSITY_OPTIONS } from "../constants";
+import { CATEGORIES, INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "../constants";
 
 export default function HomePage({
   arrivalDate, numDays, departureDate,
-  intensity, startTime, selectedCategories, allCategoriesSelected,
+  intensity, startTime, transportMode, selectedCategories, allCategoriesSelected,
   onArrivalDateChange, onNumDaysChange, onIntensityChange, onStartTimeChange,
-  onToggleCategory, onToggleAllCategories, onExplore,
+  onTransportModeChange, onToggleCategory, onToggleAllCategories, onExplore,
 }) {
   return (
     <section className="home">
@@ -57,6 +57,23 @@ export default function HomePage({
             >
               <span className="intensity-label">{option.label}</span>
               <span className="intensity-desc">{option.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>How will you get around?</h2>
+        <p>This affects travel time estimates between attractions</p>
+        <div className="transport-options">
+          {TRANSPORT_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              className={`transport-card${transportMode === option.key ? " active" : ""}`}
+              onClick={() => onTransportModeChange(option.key)}
+            >
+              <span className="transport-label">{option.label}</span>
+              <span className="transport-desc">{option.description}</span>
             </button>
           ))}
         </div>

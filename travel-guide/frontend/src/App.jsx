@@ -4,7 +4,8 @@ import "leaflet/dist/leaflet.css";
 import { CATEGORIES } from "./constants";
 import {
   parseDurationToMinutes, formatMinutes,
-  buildDailyItinerary, computeDayItems, computeTravelMinutes,
+  buildDailyItinerary, computeDayItems, computeTravelMinutes, computeTravelKm,
+  getTransportSpeed,
 } from "./utils";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
@@ -26,6 +27,7 @@ function App() {
   const [numDays, setNumDays] = useState(1);
   const [intensity, setIntensity] = useState("moderate");
   const [startTime, setStartTime] = useState("09:00");
+  const [transportMode, setTransportMode] = useState("walking");
   const [itineraryDays, setItineraryDays] = useState(null);
 
   useEffect(() => {
@@ -69,13 +71,13 @@ function App() {
     : null;
 
   const generateItinerary = () => {
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime));
+    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime, 30, transportMode));
     setPage("itinerary");
   };
 
   const changeIntensity = (newIntensity) => {
     setIntensity(newIntensity);
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime));
+    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime, 30, transportMode));
   };
 
   const moveAttractionInDay = (dayIndex, attractionIndex, dir) => {
@@ -86,13 +88,15 @@ function App() {
       const newAttractions = [...day.attractions];
       [newAttractions[attractionIndex], newAttractions[targetIndex]] =
         [newAttractions[targetIndex], newAttractions[attractionIndex]];
-      const newTravelMinutes = computeTravelMinutes(newAttractions);
-      const newItems = computeDayItems(newAttractions, newTravelMinutes, day.breakDurations, startTime);
+      const speed = getTransportSpeed(transportMode);
+      const newTravelMinutes = computeTravelMinutes(newAttractions, speed);
+      const newTravelKm = computeTravelKm(newAttractions);
+      const newItems = computeDayItems(newAttractions, newTravelMinutes, day.breakDurations, startTime, newTravelKm);
       return {
         ...prev,
         days: prev.days.map((d, i) =>
           i === dayIndex
-            ? { ...d, attractions: newAttractions, travelMinutes: newTravelMinutes, items: newItems, totalMinutes: totalFromItems(newItems) }
+            ? { ...d, attractions: newAttractions, travelMinutes: newTravelMinutes, travelKm: newTravelKm, items: newItems, totalMinutes: totalFromItems(newItems) }
             : d
         ),
       };
@@ -115,9 +119,11 @@ function App() {
         } else {
           newBreakDurations.splice(attrIndex - 1, 2, null);
         }
-        const newTravelMinutes = computeTravelMinutes(newAttractions);
-        const newItems = computeDayItems(newAttractions, newTravelMinutes, newBreakDurations, startTime);
-        return { ...day, attractions: newAttractions, travelMinutes: newTravelMinutes, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) };
+        const speed = getTransportSpeed(transportMode);
+        const newTravelMinutes = computeTravelMinutes(newAttractions, speed);
+        const newTravelKm = computeTravelKm(newAttractions);
+        const newItems = computeDayItems(newAttractions, newTravelMinutes, newBreakDurations, startTime, newTravelKm);
+        return { ...day, attractions: newAttractions, travelMinutes: newTravelMinutes, travelKm: newTravelKm, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) };
       });
       return { days: newDays, overflow: prev.overflow.filter((a) => a.id !== attractionId) };
     });
@@ -189,6 +195,8 @@ function App() {
           onNumDaysChange={setNumDays}
           onIntensityChange={setIntensity}
           onStartTimeChange={setStartTime}
+          transportMode={transportMode}
+          onTransportModeChange={setTransportMode}
           onToggleCategory={toggleCategory}
           onToggleAllCategories={toggleAllCategories}
           onExplore={() => setPage("results")}
@@ -219,6 +227,7 @@ function App() {
           numDays={numDays}
           departureDate={departureDate}
           onBack={() => setPage("results")}
+          transportMode={transportMode}
           onChangeIntensity={changeIntensity}
           onRegenerate={generateItinerary}
           onMoveAttraction={moveAttractionInDay}
