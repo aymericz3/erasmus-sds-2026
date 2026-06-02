@@ -38,3 +38,41 @@ async def save_preferences(request: PreferenceSaveRequest, db: Session = Depends
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to save preferences due to server error")
+    
+@router.get("/load/{user_id}")
+async def load_preferences(user_id: int, db: Session = Depends(get_db)):
+    try:
+        pref = db.query(Preference).filter(Preference.user_id == user_id).first()
+        
+        if not pref:
+            return {
+                "status": "success",
+                "is_new_user": True,
+                "preferences": {
+                    "intensity": "moderate",
+                    "transport_mode": "walking",
+                    "break_duration_minutes": 30,
+                    "start_time": "09:00",
+                    "selected_categories": []
+                }
+            }
+            
+        try:
+            categories_list = json.loads(pref.selected_categories) if pref.selected_categories else []
+        except:
+            categories_list = []
+            
+        return {
+            "status": "success",
+            "is_new_user": False,
+            "preferences": {
+                "intensity": pref.intensity,
+                "transport_mode": pref.transport_mode,
+                "break_duration_minutes": pref.break_duration_minutes,
+                "start_time": pref.start_time,
+                "selected_categories": categories_list
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to load preferences due to server error")
