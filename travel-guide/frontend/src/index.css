@@ -420,6 +420,61 @@ h1 {
   font-size: 14px;
 }
 
+/* Transport selector (home page) */
+.transport-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.transport-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 20px;
+  border: 2px solid #ddd;
+  border-radius: 16px;
+  background: white;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.transport-card:hover {
+  border-color: #aaa;
+}
+
+.transport-card.active {
+  border-color: #060617;
+  background: #060617;
+  color: white;
+}
+
+.transport-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.transport-desc {
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.transport-card.active .transport-desc {
+  opacity: 0.7;
+}
+
+/* Distance badge on travel slots */
+.travel-distance {
+  background: #f0f2f7;
+  color: #444;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
 /* Intensity selector (home page) */
 .intensity-options {
   display: grid;
