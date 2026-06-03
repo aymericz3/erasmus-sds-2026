@@ -1,9 +1,11 @@
-import { INTENSITY_OPTIONS } from "../constants";
+import { INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "../constants";
 import { formatMinutes, formatDayDate } from "../utils";
 import ItineraryMap from "../components/ItineraryMap";
 
+const TRANSPORT_ICONS = { walking: "🚶", cycling: "🚴", transit: "🚌" };
+
 export default function ItineraryPage({
-  days, overflow, intensity, totalDuration,
+  days, overflow, intensity, totalDuration, transportMode,
   arrivalDate, numDays, departureDate,
   onBack, onChangeIntensity, onRegenerate,
   onMoveAttraction, onRemoveAttraction,
@@ -77,13 +79,19 @@ export default function ItineraryPage({
                 {day.items.map((item) => {
                   if (item.type === "travel") {
                     const hasBreak = day.breakDurations[item.gapIndex] != null;
+                    const transportOption = TRANSPORT_OPTIONS.find((o) => o.key === transportMode);
+                    const icon = TRANSPORT_ICONS[transportMode] ?? "🚶";
+                    const modeLabel = transportOption?.label.toLowerCase() ?? "walk";
                     return (
                       <div key={item.id} className="travel-slot">
                         <div className="travel-slot-info">
                           {item.duration > 0 && (
                             <>
-                              <span className="travel-icon">🚶</span>
-                              <span className="travel-label">{item.duration} min walk</span>
+                              <span className="travel-icon">{icon}</span>
+                              <span className="travel-label">{item.duration} min {modeLabel}</span>
+                              {item.distanceKm !== null && item.distanceKm !== undefined && (
+                                <span className="travel-distance">{item.distanceKm} km</span>
+                              )}
                               {item.start_at && (
                                 <span className="travel-time">{item.start_at} → {item.end_at}</span>
                               )}
