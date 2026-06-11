@@ -36,7 +36,7 @@ function App() {
   const [transportMode, setTransportMode] = useState("walking");
   const [itineraryDays, setItineraryDays] = useState(null);
 
-  const loadAttractions = useCallback(async () => {
+  const retryLoadAttractions = useCallback(async () => {
     setIsLoadingAttractions(true);
     setAttractionsError(null);
 
@@ -52,8 +52,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    loadAttractions();
-  }, [loadAttractions]);
+    let isActive = true;
+
+    async function loadInitialAttractions() {
+      try {
+        const places = await fetchPlaces();
+        if (isActive) setAttractionsData(Array.isArray(places) ? places : []);
+      } catch {
+        if (isActive) {
+          setAttractionsData([]);
+          setAttractionsError("Could not load attractions. Please check that the backend is running.");
+        }
+      } finally {
+        if (isActive) setIsLoadingAttractions(false);
+      }
+    }
+
+    loadInitialAttractions();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const allCategoriesSelected = selectedCategories.length === CATEGORIES.length;
 
@@ -261,7 +281,7 @@ function App() {
           allCategoriesSelected={allCategoriesSelected}
           isLoadingAttractions={isLoadingAttractions}
           attractionsError={attractionsError}
-          onRetryAttractions={loadAttractions}
+          onRetryAttractions={retryLoadAttractions}
           onToggleAttraction={toggleAttraction}
           onToggleCategory={toggleCategory}
           onToggleAllCategories={toggleAllCategories}
