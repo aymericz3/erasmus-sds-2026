@@ -54,4 +54,34 @@ def schedule_itinerary(places, total_minutes, start_time="09:00", break_duration
             "end_at": _minutes_to_time(current),
         })
 
+    if not plan and places:
+        for place in places:
+            duration_val = _parse_duration(place.duration)
+            if duration_val <= total_minutes:
+                start_at = _minutes_to_time(current)
+                current += duration_val
+                plan.append({
+                    "type": "attraction",
+                    "id": place.id,
+                    "name": place.name_en or place.name_pl,
+                    "duration": place.duration,
+                    "start_at": start_at,
+                    "end_at": _minutes_to_time(current),
+                })
+                break
+
     return plan
+
+def rank_attractions(places, selected_categories: list) -> list:
+    if not selected_categories:
+        return places
+
+    ranked_places = []
+    for place in places:
+        weight = 0
+        if place.category in selected_categories:
+            weight = 100
+        ranked_places.append((weight, place))
+
+    ranked_places.sort(key=lambda x: x[0], reverse=True)
+    return [p[1] for p in ranked_places]
