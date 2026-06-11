@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import "leaflet/dist/leaflet.css";
 
 import { CATEGORIES } from "./constants";
@@ -7,6 +7,8 @@ import {
   buildDailyItinerary, computeDayItems, computeTravelMinutes, computeTravelKm,
   getTransportSpeed,
 } from "./utils";
+import { fetchPlaces, loadPreferences, savePreferences } from "./services/api";
+import AttractionDetailsModal from "./components/AttractionDetailsModal";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
 import ItineraryPage from "./pages/ItineraryPage";
@@ -23,6 +25,10 @@ function App() {
   const [page, setPage] = useState("home");
   const [selectedAttractions, setSelectedAttractions] = useState([]);
   const [attractionsData, setAttractionsData] = useState([]);
+  const [isLoadingAttractions, setIsLoadingAttractions] = useState(true);
+  const [attractionsError, setAttractionsError] = useState(null);
+  const [selectedAttractionDetails, setSelectedAttractionDetails] = useState(null);
+  const [preferenceStatus, setPreferenceStatus] = useState("");
   const [arrivalDate, setArrivalDate] = useState("");
   const [numDays, setNumDays] = useState(1);
   const [intensity, setIntensity] = useState("moderate");
@@ -30,12 +36,24 @@ function App() {
   const [transportMode, setTransportMode] = useState("walking");
   const [itineraryDays, setItineraryDays] = useState(null);
 
-  useEffect(() => {
-    fetch("http://localhost:8000/places")
-      .then((res) => res.json())
-      .then(setAttractionsData)
-      .catch((err) => console.error("Error loading places:", err));
+  const loadAttractions = useCallback(async () => {
+    setIsLoadingAttractions(true);
+    setAttractionsError(null);
+
+    try {
+      const places = await fetchPlaces();
+      setAttractionsData(Array.isArray(places) ? places : []);
+    } catch {
+      setAttractionsData([]);
+      setAttractionsError("Could not load attractions. Please check that the backend is running.");
+    } finally {
+      setIsLoadingAttractions(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadAttractions();
+  }, [loadAttractions]);
 
   const allCategoriesSelected = selectedCategories.length === CATEGORIES.length;
 
@@ -69,6 +87,35 @@ function App() {
     ? new Date(new Date(arrivalDate).getTime() + numDays * 24 * 60 * 60 * 1000)
         .toISOString().split("T")[0]
     : null;
+
+  const currentPreferences = {
+    selectedCategories,
+    arrivalDate,
+    numDays,
+    startTime,
+    intensity,
+    transportMode,
+  };
+
+  const handleSavePreferences = async () => {
+    const result = await savePreferences(currentPreferences);
+    setPreferenceStatus(result.message);
+  };
+
+  const handleLoadPreferences = async () => {
+    const result = await loadPreferences();
+
+    if (result.available && result.preferences) {
+      setSelectedCategories(result.preferences.selectedCategories ?? []);
+      setArrivalDate(result.preferences.arrivalDate ?? "");
+      setNumDays(result.preferences.numDays ?? 1);
+      setStartTime(result.preferences.startTime ?? "09:00");
+      setIntensity(result.preferences.intensity ?? "moderate");
+      setTransportMode(result.preferences.transportMode ?? "walking");
+    }
+
+    setPreferenceStatus(result.message);
+  };
 
   const generateItinerary = () => {
     setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime, 30, transportMode));
@@ -199,6 +246,9 @@ function App() {
           onTransportModeChange={setTransportMode}
           onToggleCategory={toggleCategory}
           onToggleAllCategories={toggleAllCategories}
+          preferenceStatus={preferenceStatus}
+          onSavePreferences={handleSavePreferences}
+          onLoadPreferences={handleLoadPreferences}
           onExplore={() => setPage("results")}
         />
       )}
@@ -209,9 +259,13 @@ function App() {
           selectedAttractions={selectedAttractions}
           selectedCategories={selectedCategories}
           allCategoriesSelected={allCategoriesSelected}
+          isLoadingAttractions={isLoadingAttractions}
+          attractionsError={attractionsError}
+          onRetryAttractions={loadAttractions}
           onToggleAttraction={toggleAttraction}
           onToggleCategory={toggleCategory}
           onToggleAllCategories={toggleAllCategories}
+          onShowAttractionDetails={setSelectedAttractionDetails}
           onBack={() => setPage("home")}
           onGenerateItinerary={generateItinerary}
         />
@@ -237,6 +291,11 @@ function App() {
           onChangeBreakDuration={changeBreakDuration}
         />
       )}
+
+      <AttractionDetailsModal
+        attraction={selectedAttractionDetails}
+        onClose={() => setSelectedAttractionDetails(null)}
+      />
     </div>
   );
 }
