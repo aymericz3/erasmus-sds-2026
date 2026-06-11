@@ -46,7 +46,7 @@ export default function PreferencesPanel({
           </div>
           {arrivalDate && (
             <div className="stay-summary">
-              {arrivalDate} to {departureDate} · {numDays} {numDays === 1 ? "day" : "days"} · starts at {startTime}
+              {arrivalDate} to {departureDate} - {numDays} {numDays === 1 ? "day" : "days"} - starts at {startTime}
             </div>
           )}
         </div>
