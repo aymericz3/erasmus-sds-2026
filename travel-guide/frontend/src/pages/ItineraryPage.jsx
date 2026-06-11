@@ -10,6 +10,7 @@ export default function ItineraryPage({
   onBack, onChangeIntensity, onRegenerate,
   onMoveAttraction, onRemoveAttraction,
   onAddBreak, onRemoveBreak, onChangeBreakDuration,
+  onShowAttractionDetails,
 }) {
   const intensityConfig = INTENSITY_OPTIONS.find((o) => o.key === intensity);
 
@@ -159,6 +160,13 @@ export default function ItineraryPage({
                       </div>
                       <div className="itinerary-item-actions">
                         <span className="itinerary-item-duration">{item.duration}</span>
+                        {onShowAttractionDetails && (
+                          <button
+                            className="info-btn"
+                            onClick={() => onShowAttractionDetails(item)}
+                            title="View details"
+                          >ℹ</button>
+                        )}
                         <div className="reorder-btns">
                           <button
                             className="reorder-btn"
@@ -208,6 +216,13 @@ export default function ItineraryPage({
                 </div>
                 <div className="itinerary-item-actions">
                   <span className="itinerary-item-duration">{attraction.duration}</span>
+                  {onShowAttractionDetails && (
+                    <button
+                      className="info-btn"
+                      onClick={() => onShowAttractionDetails(attraction)}
+                      title="View details"
+                    >ℹ</button>
+                  )}
                   <button
                     className="remove-btn"
                     onClick={() => onRemoveAttraction(attraction.id)}
