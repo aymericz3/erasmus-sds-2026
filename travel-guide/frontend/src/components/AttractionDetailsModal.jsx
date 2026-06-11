@@ -11,7 +11,7 @@ function formatCategories(attraction) {
 }
 
 function formatLocation(attraction) {
-  return attraction.location || attraction.address || attraction.opening_hours || "Not available";
+  return attraction.location || attraction.address || "Not available";
 }
 
 export default function AttractionDetailsModal({ attraction, onClose }) {
