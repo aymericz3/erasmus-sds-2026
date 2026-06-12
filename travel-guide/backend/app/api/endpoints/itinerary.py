@@ -111,6 +111,8 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
         for dc in request.days_config
     ] if request.days_config else None
 
+    pins = [p.model_dump() for p in request.pins] if request.pins else None
+
     return build_optimized_itinerary(
         attractions,
         num_days=request.num_days,
@@ -120,6 +122,7 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
         transport_mode=request.transport_mode,
         break_duration_minutes=request.break_duration_minutes,
         days_config=days_config,
+        pins=pins,
     )
 
 

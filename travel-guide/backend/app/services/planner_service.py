@@ -200,15 +200,53 @@ def _haversine_minutes(a: dict | None, b: dict | None, speed_kmh: int = 5) -> in
     return math.ceil(raw / 5) * 5
 
 
-def _recalculate_item_times(items: list[dict], start_time: str) -> list[dict]:
+def _pad_travel(minutes: int) -> int:
+    """
+    Round travel time UP to the nearest 10-minute interval.
+    The gap in the schedule is always a round number so the user has leeway —
+    e.g. 7 min → 10 min, 17 min → 20 min, 25 min → 30 min.
+    Returns 0 for zero-duration legs (same location).
+    The raw travel time is preserved separately on the item as 'actualMinutes'.
+    """
+    if minutes <= 0:
+        return 0
+    return math.ceil(minutes / 10) * 10
+
+
+def _recalculate_item_times(
+    items: list[dict],
+    start_time: str,
+    pin_conflicts: list | None = None,
+) -> list[dict]:
     """
     Walk through a flat list of attraction/travel/break items and assign
     sequential start_at / end_at clock strings to each one.
-    Each item's duration drives the clock forward.
+
+    If an attraction has a 'pinned_time' key the clock jumps forward to that
+    time before scheduling it. If the preceding items already ran past
+    pinned_time, a conflict entry is appended to pin_conflicts (if provided)
+    and the attraction is scheduled at the earliest available moment instead.
     """
     current = _time_to_minutes(start_time)
     result  = []
     for item in items:
+        if item["type"] == "attraction" and item.get("pinned_time"):
+            target = _time_to_minutes(item["pinned_time"])
+            if current > target:
+                if pin_conflicts is not None:
+                    pin_conflicts.append({
+                        "type":     "pin_time_conflict",
+                        "place_id": item.get("id"),
+                        "name":     item.get("name_en") or item.get("name_pl"),
+                        "message": (
+                            f"'{item.get('name_en') or item.get('name_pl')}' is pinned at "
+                            f"{item['pinned_time']} but the schedule reaches that point at "
+                            f"{_minutes_to_time(current)}. Scheduled at earliest available time."
+                        ),
+                    })
+            else:
+                current = target  # jump forward; gap before this attraction is free time
+
         duration = (
             _duration_minutes(item.get("duration"))
             if item["type"] == "attraction"
@@ -221,7 +259,10 @@ def _recalculate_item_times(items: list[dict], start_time: str) -> list[dict]:
     return result
 
 
-def _compute_day_items(attractions, travel_minutes, break_durations, start_time, travel_km=None):
+def _compute_day_items(
+    attractions, travel_minutes, break_durations, start_time,
+    travel_km=None, pin_conflicts: list | None = None,
+):
     """
     Build the flat [attraction, travel, break, attraction, travel, break, ...] list
     for one day, then stamp clock times via _recalculate_item_times.
@@ -231,6 +272,7 @@ def _compute_day_items(attractions, travel_minutes, break_durations, start_time,
     - travel_km[i]       = distance for gap i (display only, not used for timing)
     - gapIndex on travel/break items is the index of the preceding attraction,
       used by the frontend to identify which gap a travel/break belongs to.
+    - pin_conflicts: if provided, any pinned_time conflicts are appended to it.
     """
     travel_km  = travel_km or []
     raw_items  = []
@@ -241,11 +283,12 @@ def _compute_day_items(attractions, travel_minutes, break_durations, start_time,
         if i < last_index:
             travel = travel_minutes[i] if i < len(travel_minutes) else 0
             raw_items.append({
-                "type":       "travel",
-                "id":         f"travel-{attr['id']}",
-                "duration":   travel,
-                "gapIndex":   i,
-                "distanceKm": travel_km[i] if i < len(travel_km) else None,
+                "type":          "travel",
+                "id":            f"travel-{attr['id']}",
+                "duration":      _pad_travel(travel),  # rounded up to nearest 10 — drives the clock
+                "actualMinutes": travel,               # raw travel time shown to the user
+                "gapIndex":      i,
+                "distanceKm":    travel_km[i] if i < len(travel_km) else None,
             })
             break_dur = break_durations[i] if i < len(break_durations) else None
             if break_dur is not None:
@@ -256,7 +299,7 @@ def _compute_day_items(attractions, travel_minutes, break_durations, start_time,
                     "gapIndex": i,
                 })
 
-    return _recalculate_item_times(raw_items, start_time)
+    return _recalculate_item_times(raw_items, start_time, pin_conflicts)
 
 
 def place_to_attraction(place) -> dict:
@@ -675,6 +718,7 @@ def build_optimized_itinerary(
     transport_mode: str = "walking",
     break_duration_minutes: int = 30,
     days_config: list | None = None,
+    pins: list | None = None,
 ) -> dict:
     """
     Greedy packer with per-day time windows and per-day intensity overrides.
@@ -691,7 +735,8 @@ def build_optimized_itinerary(
     - Route optimisation: nearest-neighbour + 2-opt within each day,
       consuming startAnchor/endAnchor already resolved on each day dict.
     """
-    speed = get_transport_speed(transport_mode)
+    speed    = get_transport_speed(transport_mode)
+    warnings: list = []  # collected throughout; returned at the end
 
     # Pre-build pairwise haversine distance matrix (km) for all attractions.
     # Keyed by (id_a, id_b); symmetric so both directions are stored.
@@ -726,10 +771,37 @@ def build_optimized_itinerary(
     ]
     overflow = []
 
-    # TODO (pinned attractions step): pre-assign pinned attractions here before
-    # the loop below, so the greedy packer treats them as already placed.
+    # Pre-assign pinned attractions to their designated days.
+    # They are removed from the free pool so the greedy packer never double-places them.
+    # If a pin specifies a time, it is stored on the attraction dict so
+    # _recalculate_item_times can jump the clock to that time when it reaches it.
+    pinned_ids: set = set()
+    if pins:
+        for pin in pins:
+            day_idx  = pin.get("day", -1)
+            place_id = pin.get("place_id")
+            if day_idx < 0 or day_idx >= num_days:
+                warnings.append({
+                    "type":     "invalid_pin",
+                    "place_id": place_id,
+                    "message":  f"Pin for place {place_id} targets day {day_idx + 1} "
+                                f"which does not exist (trip has {num_days} day(s)).",
+                })
+                continue
+            attr = next((a for a in attractions if a["id"] == place_id), None)
+            if attr is None:
+                continue
+            pinned_attr = dict(attr)
+            if pin.get("time"):
+                pinned_attr["pinned_time"] = pin["time"]
+            days[day_idx]["attractions"].append(pinned_attr)
+            days[day_idx]["totalMinutes"] += _duration_minutes(attr.get("duration"))
+            pinned_ids.add(place_id)
 
-    for attraction in attractions:
+    # Free pool: all attractions not already pinned to a specific day.
+    free_attractions = [a for a in attractions if a["id"] not in pinned_ids]
+
+    for attraction in free_attractions:
         duration = _duration_minutes(attraction.get("duration"))
 
         # Try to fit into the first day with room (time + count budget).
@@ -738,7 +810,7 @@ def build_optimized_itinerary(
             r          = resolved[idx]
             is_relaxed = r["intensity"] == "relaxed"
             last       = day["attractions"][-1] if day["attractions"] else None
-            travel     = _haversine_minutes(last, attraction, speed) if last else 0
+            travel     = _pad_travel(_haversine_minutes(last, attraction, speed)) if last else 0
             break_oh   = break_duration_minutes if (is_relaxed and day["attractions"]) else 0
             fits_time  = day["totalMinutes"] + travel + break_oh + duration <= r["max_minutes"]
             fits_count = r["max_attractions"] is None or len(day["attractions"]) < r["max_attractions"]
@@ -755,7 +827,7 @@ def build_optimized_itinerary(
                 km     = _haversine_km(last, attraction)
                 day["travelMinutes"].append(travel)
                 day["travelKm"].append(_js_round2(km) if km is not None else None)
-                day["totalMinutes"] += travel
+                day["totalMinutes"] += _pad_travel(travel)
                 day["breakDurations"].append(break_duration_minutes if is_relaxed else None)
                 if is_relaxed:
                     day["totalMinutes"] += break_duration_minutes
@@ -794,9 +866,9 @@ def build_optimized_itinerary(
             if j < len(atts) - 1:
                 km     = _km_cached(attr, atts[j + 1], dist_cache)
                 travel = int(math.ceil((km / speed) * 60 / 5) * 5) if km else 0
-                t_mins.append(travel)
+                t_mins.append(travel)      # raw nearest-5 — stored for display
                 t_km.append(_js_round2(km) if km is not None else None)
-                total += travel
+                total += _pad_travel(travel)  # nearest-10 — drives totalMinutes
                 b_durs.append(break_duration_minutes if is_relaxed else None)
                 if is_relaxed:
                     total += break_duration_minutes
@@ -806,6 +878,7 @@ def build_optimized_itinerary(
         day["breakDurations"] = b_durs
         day["totalMinutes"]   = total
 
+    pin_conflicts: list = []
     for i, day in enumerate(days):
         day["items"] = _compute_day_items(
             day["attractions"],
@@ -813,10 +886,10 @@ def build_optimized_itinerary(
             day["breakDurations"],
             resolved[i]["start_time"],
             day["travelKm"],
+            pin_conflicts,
         )
 
-    # Collect warnings after items are built (rest check needs actual end times).
-    warnings = []
+    # Collect remaining warnings after items are built (rest check needs actual end times).
     for i in range(num_days):
         w = _check_intensity_window(i, resolved)
         if w:
@@ -825,4 +898,4 @@ def build_optimized_itinerary(
         if w:
             warnings.append(w)
 
-    return {"days": days, "overflow": overflow, "warnings": warnings}
+    return {"days": days, "overflow": overflow, "warnings": warnings + pin_conflicts}
