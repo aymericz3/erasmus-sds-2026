@@ -7,6 +7,7 @@ import {
   buildDailyItinerary, computeDayItems, computeTravelMinutes, computeTravelKm,
   getTransportSpeed,
 } from "./utils";
+import { getDayScheduleValidation } from "./itineraryValidation";
 import { fetchPlaces, loadPreferences, savePreferences } from "./services/api";
 import AttractionDetailsModal from "./components/AttractionDetailsModal";
 import HomePage from "./pages/HomePage";
@@ -35,6 +36,7 @@ function App() {
   const [startTime, setStartTime] = useState("09:00");
   const [transportMode, setTransportMode] = useState("walking");
   const [itineraryDays, setItineraryDays] = useState(null);
+  const [scheduleNotice, setScheduleNotice] = useState("");
 
   const retryLoadAttractions = useCallback(async () => {
     setIsLoadingAttractions(true);
@@ -148,38 +150,65 @@ function App() {
 
   const generateItinerary = () => {
     setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime, 30, transportMode));
+    setScheduleNotice("");
     setPage("itinerary");
   };
 
   const changeIntensity = (newIntensity) => {
     setIntensity(newIntensity);
     setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime, 30, transportMode));
+    setScheduleNotice("");
   };
 
-  const moveAttractionInDay = (dayIndex, attractionIndex, dir) => {
-    const targetIndex = dir === "up" ? attractionIndex - 1 : attractionIndex + 1;
+  const buildUpdatedDay = (day, newAttractions, newBreakDurations) => {
+    const speed = getTransportSpeed(transportMode);
+    const newTravelMinutes = computeTravelMinutes(newAttractions, speed);
+    const newTravelKm = computeTravelKm(newAttractions);
+    const newItems = computeDayItems(newAttractions, newTravelMinutes, newBreakDurations, startTime, newTravelKm);
+    return {
+      ...day,
+      attractions: newAttractions,
+      travelMinutes: newTravelMinutes,
+      travelKm: newTravelKm,
+      breakDurations: newBreakDurations,
+      items: newItems,
+      totalMinutes: totalFromItems(newItems),
+    };
+  };
+
+  const applyDayUpdate = (dayIndex, updatedDay, actionLabel) => {
+    const validation = getDayScheduleValidation(updatedDay, intensity);
+    if (!validation.isValid) {
+      setScheduleNotice(`${actionLabel} was not applied: ${validation.blockers[0]}`);
+      return;
+    }
+
+    setScheduleNotice("");
     setItineraryDays((prev) => {
-      const day = prev.days[dayIndex];
-      if (targetIndex < 0 || targetIndex >= day.attractions.length) return prev;
-      const newAttractions = [...day.attractions];
-      [newAttractions[attractionIndex], newAttractions[targetIndex]] =
-        [newAttractions[targetIndex], newAttractions[attractionIndex]];
-      const speed = getTransportSpeed(transportMode);
-      const newTravelMinutes = computeTravelMinutes(newAttractions, speed);
-      const newTravelKm = computeTravelKm(newAttractions);
-      const newItems = computeDayItems(newAttractions, newTravelMinutes, day.breakDurations, startTime, newTravelKm);
+      if (!prev) return prev;
       return {
         ...prev,
-        days: prev.days.map((d, i) =>
-          i === dayIndex
-            ? { ...d, attractions: newAttractions, travelMinutes: newTravelMinutes, travelKm: newTravelKm, items: newItems, totalMinutes: totalFromItems(newItems) }
-            : d
-        ),
+        days: prev.days.map((day, index) => (index === dayIndex ? updatedDay : day)),
       };
     });
   };
 
+  const moveAttractionInDay = (dayIndex, attractionIndex, dir) => {
+    const day = itineraryDays?.days[dayIndex];
+    if (!day) return;
+
+    const targetIndex = dir === "up" ? attractionIndex - 1 : attractionIndex + 1;
+    if (targetIndex < 0 || targetIndex >= day.attractions.length) return;
+
+    const newAttractions = [...day.attractions];
+    [newAttractions[attractionIndex], newAttractions[targetIndex]] =
+      [newAttractions[targetIndex], newAttractions[attractionIndex]];
+    const updatedDay = buildUpdatedDay(day, newAttractions, [...day.breakDurations]);
+    applyDayUpdate(dayIndex, updatedDay, "Reorder");
+  };
+
   const removeFromItinerary = (attractionId) => {
+    setScheduleNotice("");
     setSelectedAttractions((prev) => prev.filter((a) => a.id !== attractionId));
     setItineraryDays((prev) => {
       if (!prev) return prev;
@@ -206,52 +235,51 @@ function App() {
   };
 
   const addBreak = (dayIndex, gapIndex) => {
-    setItineraryDays((prev) => {
-      const day = prev.days[dayIndex];
-      const newBreakDurations = [...day.breakDurations];
-      newBreakDurations[gapIndex] = 30;
-      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
-      return {
-        ...prev,
-        days: prev.days.map((d, i) =>
-          i === dayIndex
-            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
-            : d
-        ),
-      };
-    });
+    const day = itineraryDays?.days[dayIndex];
+    if (!day) return;
+
+    const newBreakDurations = [...day.breakDurations];
+    newBreakDurations[gapIndex] = 30;
+    const updatedDay = buildUpdatedDay(day, day.attractions, newBreakDurations);
+    applyDayUpdate(dayIndex, updatedDay, "Break");
   };
 
   const removeBreak = (dayIndex, gapIndex) => {
+    const day = itineraryDays?.days[dayIndex];
+    if (!day) return;
+
+    const newBreakDurations = [...day.breakDurations];
+    newBreakDurations[gapIndex] = null;
+    const updatedDay = buildUpdatedDay(day, day.attractions, newBreakDurations);
+    setScheduleNotice("");
     setItineraryDays((prev) => {
-      const day = prev.days[dayIndex];
-      const newBreakDurations = [...day.breakDurations];
-      newBreakDurations[gapIndex] = null;
-      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
+      if (!prev) return prev;
       return {
         ...prev,
-        days: prev.days.map((d, i) =>
-          i === dayIndex
-            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
-            : d
-        ),
+        days: prev.days.map((currentDay, index) => (index === dayIndex ? updatedDay : currentDay)),
       };
     });
   };
 
   const changeBreakDuration = (dayIndex, gapIndex, delta) => {
+    const day = itineraryDays?.days[dayIndex];
+    if (!day) return;
+
+    const newBreakDurations = [...day.breakDurations];
+    newBreakDurations[gapIndex] = Math.max(15, Math.min(120, (newBreakDurations[gapIndex] ?? 30) + delta));
+    const updatedDay = buildUpdatedDay(day, day.attractions, newBreakDurations);
+
+    if (delta > 0) {
+      applyDayUpdate(dayIndex, updatedDay, "Break duration change");
+      return;
+    }
+
+    setScheduleNotice("");
     setItineraryDays((prev) => {
-      const day = prev.days[dayIndex];
-      const newBreakDurations = [...day.breakDurations];
-      newBreakDurations[gapIndex] = Math.max(15, Math.min(120, (newBreakDurations[gapIndex] ?? 30) + delta));
-      const newItems = computeDayItems(day.attractions, day.travelMinutes, newBreakDurations, startTime);
+      if (!prev) return prev;
       return {
         ...prev,
-        days: prev.days.map((d, i) =>
-          i === dayIndex
-            ? { ...d, breakDurations: newBreakDurations, items: newItems, totalMinutes: totalFromItems(newItems) }
-            : d
-        ),
+        days: prev.days.map((currentDay, index) => (index === dayIndex ? updatedDay : currentDay)),
       };
     });
   };
@@ -311,6 +339,7 @@ function App() {
           departureDate={departureDate}
           onBack={() => setPage("results")}
           transportMode={transportMode}
+          scheduleNotice={scheduleNotice}
           onChangeIntensity={changeIntensity}
           onRegenerate={generateItinerary}
           onMoveAttraction={moveAttractionInDay}

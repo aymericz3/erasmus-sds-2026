@@ -1,4 +1,5 @@
 import { INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "../constants";
+import { getItineraryScheduleValidation } from "../itineraryValidation";
 import { formatMinutes, formatDayDate } from "../utils";
 import ItineraryMap from "../components/ItineraryMap";
 
@@ -7,11 +8,13 @@ const TRANSPORT_ICONS = { walking: "🚶", cycling: "🚴", transit: "🚌" };
 export default function ItineraryPage({
   days, overflow, intensity, totalDuration, transportMode,
   arrivalDate, numDays, departureDate,
+  scheduleNotice,
   onBack, onChangeIntensity, onRegenerate,
   onMoveAttraction, onRemoveAttraction,
   onAddBreak, onRemoveBreak, onChangeBreakDuration,
 }) {
   const intensityConfig = INTENSITY_OPTIONS.find((o) => o.key === intensity);
+  const scheduleValidation = getItineraryScheduleValidation(days, intensity);
 
   return (
     <section className="itinerary">
@@ -46,12 +49,30 @@ export default function ItineraryPage({
         </button>
       </div>
 
+      {scheduleNotice && (
+        <div className="schedule-alert critical">
+          {scheduleNotice}
+        </div>
+      )}
+
+      {(scheduleValidation.blockers.length > 0 || scheduleValidation.warnings.length > 0) && (
+        <div className={scheduleValidation.isValid ? "schedule-alert" : "schedule-alert critical"}>
+          <strong>{scheduleValidation.isValid ? "Schedule warnings" : "Schedule needs attention"}</strong>
+          <ul>
+            {[...new Set([...scheduleValidation.blockers, ...scheduleValidation.warnings])].map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="itinerary-map-panel">
         <ItineraryMap days={days} />
       </div>
 
       {days.map((day, dayIndex) => {
         let attrCounter = 0;
+        const dayValidation = scheduleValidation.dayValidations[dayIndex];
 
         return (
           <div key={dayIndex} className="day-block">
@@ -69,6 +90,28 @@ export default function ItineraryPage({
               <div className="day-warning">
                 ⚠ This day is {formatMinutes(day.totalMinutes - intensityConfig.maxMinutesPerDay)} over
                 your <strong>{intensityConfig.label}</strong> limit — shorten a break or remove an attraction.
+              </div>
+            )}
+
+            {dayValidation?.blockers.length > 0 && (
+              <div className="day-warning critical">
+                <strong>Invalid schedule:</strong>
+                <ul>
+                  {dayValidation.blockers.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {dayValidation?.warnings.length > 0 && (
+              <div className="day-warning">
+                <strong>Schedule warning:</strong>
+                <ul>
+                  {dayValidation.warnings.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
               </div>
             )}
 
