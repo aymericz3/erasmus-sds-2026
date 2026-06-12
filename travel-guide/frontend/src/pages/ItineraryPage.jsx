@@ -10,6 +10,7 @@ export default function ItineraryPage({
   arrivalDate, numDays, departureDate,
   scheduleNotice,
   onBack, onChangeIntensity, onRegenerate,
+  onFinalizeItinerary, isFinalizing,
   onMoveAttraction, onRemoveAttraction,
   onAddBreak, onRemoveBreak, onChangeBreakDuration,
   onShowAttractionDetails,
@@ -48,6 +49,16 @@ export default function ItineraryPage({
         <button className="secondary regenerate-btn" onClick={onRegenerate}>
           Regenerate
         </button>
+        {onFinalizeItinerary && (
+          <button
+            className="primary finalize-btn"
+            onClick={onFinalizeItinerary}
+            disabled={isFinalizing}
+            title="Replace estimates with real Google Maps times"
+          >
+            {isFinalizing ? "Getting times…" : "Get exact times"}
+          </button>
+        )}
       </div>
 
       {scheduleNotice && (
@@ -135,6 +146,11 @@ export default function ItineraryPage({
                               <span className="travel-label">{item.actualMinutes ?? item.duration} min {modeLabel}</span>
                               {item.distanceKm !== null && item.distanceKm !== undefined && (
                                 <span className="travel-distance">{item.distanceKm} km</span>
+                              )}
+                              {item.source && (
+                                <span className={`source-badge source-badge--${item.source}`}>
+                                  {item.source === "google" ? "Google" : "~est"}
+                                </span>
                               )}
                               {item.start_at && (
                                 <span className="travel-time">{item.start_at} → {item.end_at}</span>

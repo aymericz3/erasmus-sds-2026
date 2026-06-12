@@ -6,6 +6,7 @@ export default function PreferencesPanel({
   departureDate,
   intensity,
   startTime,
+  endTime,
   transportMode,
   selectedCategories,
   allCategoriesSelected,
@@ -14,6 +15,7 @@ export default function PreferencesPanel({
   onNumDaysChange,
   onIntensityChange,
   onStartTimeChange,
+  onEndTimeChange,
   onTransportModeChange,
   onToggleCategory,
   onToggleAllCategories,
@@ -44,9 +46,16 @@ export default function PreferencesPanel({
               onChange={(e) => onStartTimeChange(e.target.value)}
             />
           </div>
+          <div className="stay-field">
+            <label htmlFor="end-time">Daily end time</label>
+            <input
+              id="end-time" type="time" value={endTime}
+              onChange={(e) => onEndTimeChange(e.target.value)}
+            />
+          </div>
           {arrivalDate && (
             <div className="stay-summary">
-              {arrivalDate} to {departureDate} - {numDays} {numDays === 1 ? "day" : "days"} - starts at {startTime}
+              {arrivalDate} → {departureDate} · {numDays} {numDays === 1 ? "day" : "days"} · {startTime}–{endTime}
             </div>
           )}
         </div>

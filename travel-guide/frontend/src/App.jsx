@@ -8,7 +8,7 @@ import {
   getTransportSpeed,
 } from "./utils";
 import { getDayScheduleValidation } from "./itineraryValidation";
-import { fetchPlaces, loadPreferences, savePreferences, planItinerary } from "./services/api";
+import { fetchPlaces, loadPreferences, savePreferences, planItinerary, finalizeItinerary } from "./services/api";
 import AttractionDetailsModal from "./components/AttractionDetailsModal";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
@@ -38,7 +38,9 @@ function App() {
   const [endTime, setEndTime] = useState("21:00");
   const [itineraryDays, setItineraryDays] = useState(null);
   const [isGeneratingItinerary, setIsGeneratingItinerary] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [scheduleNotice, setScheduleNotice] = useState("");
+  const [pins, setPins] = useState({});
 
   const retryLoadAttractions = useCallback(async () => {
     setIsLoadingAttractions(true);
@@ -99,7 +101,19 @@ function App() {
   const toggleAttraction = (attraction) => {
     setSelectedAttractions((prev) => {
       const exists = prev.some((a) => a.id === attraction.id);
+      if (exists) {
+        setPins((p) => { const next = { ...p }; delete next[attraction.id]; return next; });
+      }
       return exists ? prev.filter((a) => a.id !== attraction.id) : [...prev, attraction];
+    });
+  };
+
+  const pinAttraction = (attractionId, dayIndex) => {
+    setPins((prev) => {
+      if (prev[attractionId] === dayIndex) {
+        const next = { ...prev }; delete next[attractionId]; return next;
+      }
+      return { ...prev, [attractionId]: dayIndex };
     });
   };
 
@@ -154,6 +168,7 @@ function App() {
     setIsGeneratingItinerary(true);
     setScheduleNotice("");
     try {
+      const pinList = Object.entries(pins).map(([id, day]) => ({ place_id: Number(id), day }));
       const result = await planItinerary({
         place_ids: selectedAttractions.map((a) => a.id),
         num_days: numDays,
@@ -163,6 +178,7 @@ function App() {
         transport_mode: transportMode,
         break_duration_minutes: 30,
         selected_categories: selectedCategories,
+        pins: pinList.length ? pinList : undefined,
       });
       setItineraryDays(result);
       setPage("itinerary");
@@ -190,6 +206,27 @@ function App() {
       setScheduleNotice("");
     } catch {
       setScheduleNotice("Could not regenerate itinerary. Please check that the backend is running.");
+    }
+  };
+
+  const handleFinalizeItinerary = async () => {
+    if (!itineraryDays?.days?.length) return;
+    setIsFinalizing(true);
+    setScheduleNotice("");
+    try {
+      const result = await finalizeItinerary({
+        days: itineraryDays.days.map((day) => ({
+          place_ids: day.attractions.map((a) => a.id),
+          start_time: startTime,
+          break_durations: day.breakDurations,
+        })),
+        transport_mode: transportMode,
+      });
+      setItineraryDays((prev) => ({ ...prev, days: result.days }));
+    } catch {
+      setScheduleNotice("Could not get exact times. Make sure the backend is running.");
+    } finally {
+      setIsFinalizing(false);
     }
   };
 
@@ -326,12 +363,14 @@ function App() {
           departureDate={departureDate}
           intensity={intensity}
           startTime={startTime}
+          endTime={endTime}
           selectedCategories={selectedCategories}
           allCategoriesSelected={allCategoriesSelected}
           onArrivalDateChange={setArrivalDate}
           onNumDaysChange={setNumDays}
           onIntensityChange={setIntensity}
           onStartTimeChange={setStartTime}
+          onEndTimeChange={setEndTime}
           transportMode={transportMode}
           onTransportModeChange={setTransportMode}
           onToggleCategory={toggleCategory}
@@ -359,6 +398,9 @@ function App() {
           onBack={() => setPage("home")}
           onGenerateItinerary={generateItinerary}
           isGeneratingItinerary={isGeneratingItinerary}
+          pins={pins}
+          numDays={numDays}
+          onPinAttraction={pinAttraction}
         />
       )}
 
@@ -376,6 +418,8 @@ function App() {
           scheduleNotice={scheduleNotice}
           onChangeIntensity={changeIntensity}
           onRegenerate={generateItinerary}
+          onFinalizeItinerary={handleFinalizeItinerary}
+          isFinalizing={isFinalizing}
           onMoveAttraction={moveAttractionInDay}
           onRemoveAttraction={removeFromItinerary}
           onAddBreak={addBreak}
