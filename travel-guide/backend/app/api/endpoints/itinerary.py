@@ -83,8 +83,8 @@ async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depend
 # and handles ordering, time windows, per-day intensity, anchor-based routing,
 # and validation warnings. Steps added incrementally:
 #   Step 1 (done):  schema + skeleton
-#   Step 2 (now):   per-day time windows + per-day intensity
-#   Step 3 (next):  validation warnings (intensity vs window, inter-day rest)
+#   Step 2 (done):  per-day time windows + per-day intensity
+#   Step 3 (done):  validation warnings (intensity vs window, inter-day rest)
 #   Step 4:         anchor resolution (Stary Rynek default, prev/next day logic)
 #   Step 5:         route optimization (nearest-neighbor + 2-opt)
 #   Step 6:         Google finalization endpoint for accurate travel times
@@ -105,7 +105,7 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
         for dc in request.days_config
     ] if request.days_config else None
 
-    result = build_optimized_itinerary(
+    return build_optimized_itinerary(
         attractions,
         num_days=request.num_days,
         global_intensity=request.intensity,
@@ -115,7 +115,3 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
         break_duration_minutes=request.break_duration_minutes,
         days_config=days_config,
     )
-
-    # warnings will be populated in Step 3
-    result["warnings"] = []
-    return result

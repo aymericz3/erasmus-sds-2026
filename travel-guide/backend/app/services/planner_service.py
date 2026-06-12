@@ -27,7 +27,7 @@ _compute_day_items, etc.) defined below.
 import math
 import re
 
-from app.core.planning_config import get_intensity_config, get_transport_speed
+from app.core.planning_config import get_intensity_config, get_transport_speed, get_min_rest_minutes
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +361,88 @@ def build_daily_itinerary(
 # GENERATION 3 helpers
 # ---------------------------------------------------------------------------
 
+def _check_intensity_window(day_index: int, resolved: list[dict]) -> dict | None:
+    """
+    Warn if the day's time window is too short or too long for its intensity.
+    E.g. a 10h window with relaxed intensity (designed for ~2–6h) is a mismatch.
+    Returns a warning dict or None if everything looks fine.
+    """
+    r           = resolved[day_index]
+    config      = get_intensity_config(r["intensity"])
+    window      = r["max_minutes"]
+    min_window  = config["min_window_minutes"]
+    max_window  = config["max_window_minutes"]
+
+    if window < min_window:
+        return {
+            "type":    "intensity_mismatch",
+            "day":     day_index + 1,  # 1-indexed for display
+            "message": (
+                f"Day {day_index + 1}: {r['intensity']} intensity expects at least "
+                f"{min_window // 60}h but the window is only {window // 60}h "
+                f"{window % 60:02d}min ({r['start_time']}–{r['end_time']})."
+            ),
+        }
+    if window > max_window:
+        return {
+            "type":    "intensity_mismatch",
+            "day":     day_index + 1,
+            "message": (
+                f"Day {day_index + 1}: {r['intensity']} intensity is designed for up to "
+                f"{max_window // 60}h but the window is {window // 60}h "
+                f"{window % 60:02d}min ({r['start_time']}–{r['end_time']}). "
+                f"Consider switching to a more intense setting."
+            ),
+        }
+    return None
+
+
+def _check_inter_day_rest(day_index: int, days: list[dict], resolved: list[dict]) -> dict | None:
+    """
+    Warn if there is less than MIN_REST_MINUTES of rest between the actual end
+    of day N and the configured start of day N+1.
+    Rest is computed across the midnight boundary (day N ends at e.g. 20:00,
+    day N+1 starts at 09:00 → 13h rest).
+    """
+    if day_index >= len(days) - 1:
+        return None  # no next day to compare against
+
+    day = days[day_index]
+
+    # Actual end: last item's end_at, or the configured end_time if day is empty.
+    if day["items"]:
+        actual_end_str = day["items"][-1]["end_at"]
+    else:
+        actual_end_str = resolved[day_index]["end_time"]
+
+    next_start_str = resolved[day_index + 1]["start_time"]
+
+    end_min   = _time_to_minutes(actual_end_str)
+    start_min = _time_to_minutes(next_start_str)
+
+    # Rest spans midnight: add 24h if next start is earlier in the clock than current end.
+    rest_minutes = start_min - end_min
+    if rest_minutes < 0:
+        rest_minutes += 24 * 60
+
+    min_rest = get_min_rest_minutes()
+    if rest_minutes < min_rest:
+        rest_h   = rest_minutes // 60
+        rest_min = rest_minutes % 60
+        return {
+            "type":          "insufficient_rest",
+            "between_days":  [day_index + 1, day_index + 2],  # 1-indexed
+            "rest_hours":    round(rest_minutes / 60, 1),
+            "message": (
+                f"Only {rest_h}h {rest_min:02d}min of rest between day {day_index + 1} "
+                f"(ends {actual_end_str}) and day {day_index + 2} "
+                f"(starts {next_start_str}). "
+                f"Recommended minimum is {min_rest // 60}h."
+            ),
+        }
+    return None
+
+
 def _resolve_day_settings(
     day_index: int,
     global_start: str,
@@ -495,4 +577,14 @@ def build_optimized_itinerary(
             day["travelKm"],
         )
 
-    return {"days": days, "overflow": overflow}
+    # Collect warnings after items are built (rest check needs actual end times).
+    warnings = []
+    for i in range(num_days):
+        w = _check_intensity_window(i, resolved)
+        if w:
+            warnings.append(w)
+        w = _check_inter_day_rest(i, days, resolved)
+        if w:
+            warnings.append(w)
+
+    return {"days": days, "overflow": overflow, "warnings": warnings}
