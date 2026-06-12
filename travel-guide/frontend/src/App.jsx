@@ -4,11 +4,11 @@ import "leaflet/dist/leaflet.css";
 import { CATEGORIES } from "./constants";
 import {
   parseDurationToMinutes, formatMinutes,
-  buildDailyItinerary, computeDayItems, computeTravelMinutes, computeTravelKm,
+  computeDayItems, computeTravelMinutes, computeTravelKm,
   getTransportSpeed,
 } from "./utils";
 import { getDayScheduleValidation } from "./itineraryValidation";
-import { fetchPlaces, loadPreferences, savePreferences } from "./services/api";
+import { fetchPlaces, loadPreferences, savePreferences, planItinerary } from "./services/api";
 import AttractionDetailsModal from "./components/AttractionDetailsModal";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
@@ -35,7 +35,9 @@ function App() {
   const [intensity, setIntensity] = useState("moderate");
   const [startTime, setStartTime] = useState("09:00");
   const [transportMode, setTransportMode] = useState("walking");
+  const [endTime, setEndTime] = useState("21:00");
   const [itineraryDays, setItineraryDays] = useState(null);
+  const [isGeneratingItinerary, setIsGeneratingItinerary] = useState(false);
   const [scheduleNotice, setScheduleNotice] = useState("");
 
   const retryLoadAttractions = useCallback(async () => {
@@ -148,16 +150,45 @@ function App() {
     }
   };
 
-  const generateItinerary = () => {
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime, 30, transportMode));
+  const generateItinerary = async () => {
+    setIsGeneratingItinerary(true);
     setScheduleNotice("");
-    setPage("itinerary");
+    try {
+      const result = await planItinerary({
+        place_ids: selectedAttractions.map((a) => a.id),
+        num_days: numDays,
+        intensity,
+        start_time: startTime,
+        end_time: endTime,
+        transport_mode: transportMode,
+        break_duration_minutes: 30,
+      });
+      setItineraryDays(result);
+      setPage("itinerary");
+    } catch {
+      setScheduleNotice("Could not generate itinerary. Please check that the backend is running.");
+    } finally {
+      setIsGeneratingItinerary(false);
+    }
   };
 
-  const changeIntensity = (newIntensity) => {
+  const changeIntensity = async (newIntensity) => {
     setIntensity(newIntensity);
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime, 30, transportMode));
-    setScheduleNotice("");
+    try {
+      const result = await planItinerary({
+        place_ids: selectedAttractions.map((a) => a.id),
+        num_days: numDays,
+        intensity: newIntensity,
+        start_time: startTime,
+        end_time: endTime,
+        transport_mode: transportMode,
+        break_duration_minutes: 30,
+      });
+      setItineraryDays(result);
+      setScheduleNotice("");
+    } catch {
+      setScheduleNotice("Could not regenerate itinerary. Please check that the backend is running.");
+    }
   };
 
   const buildUpdatedDay = (day, newAttractions, newBreakDurations) => {
@@ -325,6 +356,7 @@ function App() {
           onShowAttractionDetails={setSelectedAttractionDetails}
           onBack={() => setPage("home")}
           onGenerateItinerary={generateItinerary}
+          isGeneratingItinerary={isGeneratingItinerary}
         />
       )}
 

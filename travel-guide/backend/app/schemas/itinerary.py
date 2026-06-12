@@ -2,41 +2,6 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 
-# ---------------------------------------------------------------------------
-# OBSOLETE — used only by POST /itinerary/plan (Sprint 1, single-day only).
-# The frontend never calls /plan directly; it was only used for early testing.
-# Can be removed once /plan is dropped.
-# ---------------------------------------------------------------------------
-class ItineraryRequest(BaseModel):
-    place_ids: List[int]
-    total_minutes: int          # hard time cap computed by the frontend
-    intensity: str = "moderate"
-    start_time: str = "09:00"
-    break_duration_minutes: int = 30
-
-
-# ---------------------------------------------------------------------------
-# Used by POST /itinerary/generate (Sprint 2 I3, multi-day).
-# Preserves the place_ids order sent by the frontend — ordering was the
-# frontend's responsibility. /generate will be replaced by /plan-optimized
-# once the frontend is updated; this schema can be removed at that point.
-# ---------------------------------------------------------------------------
-class ItineraryPlanRequest(BaseModel):
-    place_ids: List[int]        # ordered by the frontend (click order)
-    num_days: int = 1
-    intensity: str = "moderate" # controls time cap + attraction count per day
-    start_time: str = "09:00"
-    break_duration_minutes: int = 30
-    transport_mode: str = "walking"
-
-
-# ---------------------------------------------------------------------------
-# Current — used by POST /itinerary/plan-optimized.
-# The backend is now responsible for ordering: it receives an unordered pool
-# of place_ids and returns an optimized route with per-day time windows,
-# per-day intensity overrides, start/end anchor support, and warnings.
-# ---------------------------------------------------------------------------
-
 class Coordinates(BaseModel):
     # A GPS point used as a day anchor (e.g. hotel, train station, map pin).
     lat: float
@@ -45,7 +10,7 @@ class Coordinates(BaseModel):
 
 class DayConfig(BaseModel):
     # Per-day overrides. Any field left null falls back to the global default
-    # on OptimizedItineraryRequest. One entry per day in days_config.
+    # on ItineraryRequest. One entry per day in days_config.
     start_time: Optional[str] = None       # e.g. "08:00" — overrides global start_time
     end_time: Optional[str] = None         # e.g. "20:00" — overrides global end_time
     intensity: Optional[str] = None        # overrides global intensity for this day only
@@ -62,12 +27,12 @@ class AttractionPin(BaseModel):
     time: Optional[str] = None  # "14:00" — if set, attraction is scheduled at this exact time
 
 
-class OptimizedItineraryRequest(BaseModel):
+class ItineraryRequest(BaseModel):
     place_ids: List[int]                   # unordered pool — backend determines visit order
     num_days: int = 1
     intensity: str = "moderate"            # global default, can be overridden per day
     start_time: str = "09:00"             # global default daily start
-    end_time: str = "17:00"               # global default daily end (replaces max_minutes)
+    end_time: str = "21:00"               # global default daily end
     transport_mode: str = "walking"        # default for all legs, per-leg override coming later
     break_duration_minutes: int = 30
     # Optional list of per-day configs. Can be null for a day to use all globals.

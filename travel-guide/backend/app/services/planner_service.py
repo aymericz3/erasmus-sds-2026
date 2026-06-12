@@ -1,27 +1,13 @@
 """
 planner_service.py — all itinerary scheduling logic.
 
-There are two generations of planners in this file:
+  build_itinerary  →  POST /itinerary/plan
+    Backend-driven multi-day planner: per-day time windows, per-day intensity
+    overrides, start/end anchor-based routing, nearest-neighbour + 2-opt route
+    optimisation, pinned attractions, and validation warnings.
 
-  GENERATION 1 (Sprint 1 / obsolete)
-    schedule_itinerary  →  used by POST /itinerary/plan
-    Simple single-day greedy scheduler. No travel time, no multi-day.
-    Will be removed when /plan is dropped.
-
-  GENERATION 2 (Sprint 2 I3 / to be replaced)
-    build_daily_itinerary  →  used by POST /itinerary/generate
-    Multi-day greedy packer ported 1:1 from the frontend (utils.js).
-    Respects the place_ids order sent by the client.
-    Will be removed when the frontend switches to /plan-optimized.
-
-  GENERATION 3 (current / active development)
-    build_optimized_itinerary  →  used by POST /itinerary/plan-optimized
-    Same greedy packer but backend-driven: per-day time windows, per-day
-    intensity overrides, anchor-based routing, and route optimisation.
-    Steps being added incrementally (see endpoints/itinerary.py for the list).
-
-All three generations share the same set of private helpers (_haversine_km,
-_compute_day_items, etc.) defined below.
+Private helpers (_haversine_km, _compute_day_items, etc.) are used by both
+build_itinerary and the /finalize endpoint.
 """
 
 import math
@@ -47,102 +33,7 @@ def _minutes_to_time(total: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Generation 1 helpers — only used by schedule_itinerary / POST /plan
-# ---------------------------------------------------------------------------
-
-def _parse_duration(duration: str) -> int:
-    # Parses "Xh Ymin" / "Xh" / "Ymin" → minutes. Defaults to 60 if empty.
-    # Used only by the old schedule_itinerary; Generation 2+ uses _duration_minutes.
-    if not duration:
-        return 60
-    if "h" in duration and "min" in duration:
-        parts = duration.split("h")
-        return int(parts[0].strip()) * 60 + int(parts[1].replace("min", "").strip())
-    if "h" in duration:
-        return int(duration.split("h")[0].strip()) * 60
-    if "min" in duration:
-        return int(duration.split("min")[0].strip())
-    return 60
-
-
-# ---------------------------------------------------------------------------
-# GENERATION 1 — obsolete, kept until POST /itinerary/plan is removed
-# ---------------------------------------------------------------------------
-
-def schedule_itinerary(places, total_minutes, start_time="09:00", break_duration_minutes=30, intensity="moderate"):
-    """
-    Single-day greedy scheduler (Sprint 1).
-    Iterates places in the given order and stops when total_minutes is exhausted.
-    No travel time between places. Inserts breaks only in relaxed mode.
-    """
-    plan = []
-    elapsed = 0
-    current = _time_to_minutes(start_time)
-    is_relaxed = intensity == "relaxed"
-
-    for place in places:
-        duration_val = _parse_duration(place.duration)
-
-        if is_relaxed and plan:
-            current += break_duration_minutes
-            elapsed += break_duration_minutes
-            plan.append({
-                "type": "break",
-                "duration": break_duration_minutes,
-                "start_at": _minutes_to_time(current - break_duration_minutes),
-                "end_at": _minutes_to_time(current),
-            })
-
-        if elapsed + duration_val > total_minutes:
-            break
-
-        start_at = _minutes_to_time(current)
-        current += duration_val
-        elapsed += duration_val
-
-        plan.append({
-            "type": "attraction",
-            "id": place.id,
-            "name": place.name_en or place.name_pl,
-            "duration": place.duration,
-            "start_at": start_at,
-            "end_at": _minutes_to_time(current),
-        })
-
-    if not plan and places:
-        for place in places:
-            duration_val = _parse_duration(place.duration)
-            if duration_val <= total_minutes:
-                start_at = _minutes_to_time(current)
-                current += duration_val
-                plan.append({
-                    "type": "attraction",
-                    "id": place.id,
-                    "name": place.name_en or place.name_pl,
-                    "duration": place.duration,
-                    "start_at": start_at,
-                    "end_at": _minutes_to_time(current),
-                })
-                break
-
-    return plan
-  
-def rank_attractions(places, selected_categories: list) -> list:
-    if not selected_categories:
-        return places
-
-    ranked_places = []
-    for place in places:
-        weight = 0
-        if place.category in selected_categories:
-            weight = 100
-        ranked_places.append((weight, place))
-
-    ranked_places.sort(key=lambda x: x[0], reverse=True)
-    return [p[1] for p in ranked_places]
-
-# ---------------------------------------------------------------------------
-# Shared helpers — used by Generation 2 and Generation 3
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 def _duration_minutes(duration: str | None) -> int:
@@ -320,88 +211,7 @@ def place_to_attraction(place) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GENERATION 2 — to be removed when /itinerary/generate is retired
-# ---------------------------------------------------------------------------
-
-def build_daily_itinerary(
-    attractions: list[dict],
-    num_days: int,
-    intensity: str = "moderate",
-    start_time: str = "09:00",
-    break_duration_minutes: int = 30,
-    transport_mode: str = "walking",
-) -> dict:
-    """
-    Multi-day greedy packer ported 1:1 from the frontend buildDailyItinerary (utils.js).
-    Respects the order of attractions as received — ordering is the caller's responsibility.
-    Time budget per day comes from intensity config (max_minutes_per_day).
-    Used by POST /itinerary/generate; will be retired when /plan-optimized is live.
-    """
-    config          = get_intensity_config(intensity)
-    max_minutes     = config["max_minutes_per_day"]
-    max_attractions = config["max_attractions_per_day"]
-    is_relaxed      = intensity == "relaxed"
-    speed           = get_transport_speed(transport_mode)
-
-    days = [
-        {
-            "attractions":    [],
-            "travelMinutes":  [],
-            "travelKm":       [],
-            "breakDurations": [],
-            "items":          [],
-            "totalMinutes":   0,
-        }
-        for _ in range(num_days)
-    ]
-    overflow = []
-
-    for attraction in attractions:
-        duration = _duration_minutes(attraction.get("duration"))
-
-        # Try to fit into the first day that has room (time + count budget).
-        day_index = -1
-        for idx, day in enumerate(days):
-            last           = day["attractions"][-1] if day["attractions"] else None
-            travel         = _haversine_minutes(last, attraction, speed) if last else 0
-            break_overhead = break_duration_minutes if (is_relaxed and day["attractions"]) else 0
-            fits_time      = day["totalMinutes"] + travel + break_overhead + duration <= max_minutes
-            fits_count     = max_attractions is None or len(day["attractions"]) < max_attractions
-            if fits_time and fits_count:
-                day_index = idx
-                break
-
-        if day_index != -1:
-            day = days[day_index]
-            if day["attractions"]:
-                last   = day["attractions"][-1]
-                travel = _haversine_minutes(last, attraction, speed)
-                km     = _haversine_km(last, attraction)
-                day["travelMinutes"].append(travel)
-                day["travelKm"].append(_js_round2(km) if km is not None else None)
-                day["totalMinutes"] += travel
-                day["breakDurations"].append(break_duration_minutes if is_relaxed else None)
-                if is_relaxed:
-                    day["totalMinutes"] += break_duration_minutes
-            day["attractions"].append(attraction)
-            day["totalMinutes"] += duration
-        else:
-            overflow.append(attraction)
-
-    for day in days:
-        day["items"] = _compute_day_items(
-            day["attractions"],
-            day["travelMinutes"],
-            day["breakDurations"],
-            start_time,
-            day["travelKm"],
-        )
-
-    return {"days": days, "overflow": overflow}
-
-
-# ---------------------------------------------------------------------------
-# GENERATION 3 helpers
+# Planner helpers
 # ---------------------------------------------------------------------------
 
 def _check_intensity_window(day_index: int, resolved: list[dict]) -> dict | None:
@@ -706,28 +516,27 @@ def _resolve_day_settings(
 
 
 # ---------------------------------------------------------------------------
-# GENERATION 3 — active, used by POST /itinerary/plan-optimized
+# Main planner — POST /itinerary/plan
 # ---------------------------------------------------------------------------
 
-def build_optimized_itinerary(
+def build_itinerary(
     attractions: list[dict],
     num_days: int,
     global_intensity: str = "moderate",
     global_start_time: str = "09:00",
-    global_end_time: str = "17:00",
+    global_end_time: str = "21:00",
     transport_mode: str = "walking",
     break_duration_minutes: int = 30,
     days_config: list | None = None,
     pins: list | None = None,
 ) -> dict:
     """
-    Greedy packer with per-day time windows and per-day intensity overrides.
+    Greedy multi-day packer with route optimisation and per-day configuration.
 
-    Key differences from build_daily_itinerary (Gen 2):
-    - Time budget per day = end_time - start_time, NOT intensity.max_minutes_per_day.
-      Intensity only controls the attraction count cap for each day.
-    - Each day in the response includes startTime, endTime, intensity fields.
-    - days_config allows overriding any of these per day.
+    Time budget per day = end_time - start_time.
+    Intensity controls the attraction count cap (not time budget).
+    Each day in the response includes startTime, endTime, intensity fields.
+    days_config allows overriding any of these per day.
 
     Steps still to be added (see endpoints/itinerary.py for the full roadmap):
     - Pinned attractions: pre-assign specific place_ids to specific days before

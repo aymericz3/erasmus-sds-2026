@@ -49,6 +49,29 @@ export function fetchPlaces() {
   return request("/places");
 }
 
+export function planItinerary({
+  place_ids,
+  num_days = 1,
+  intensity = "moderate",
+  start_time = "09:00",
+  end_time = "21:00",
+  transport_mode = "walking",
+  break_duration_minutes = 30,
+}) {
+  return request("/itinerary/plan", {
+    method: "POST",
+    body: JSON.stringify({
+      place_ids,
+      num_days,
+      intensity,
+      start_time,
+      end_time,
+      transport_mode,
+      break_duration_minutes,
+    }),
+  });
+}
+
 export function fetchCategories() {
   return request("/categories");
 }

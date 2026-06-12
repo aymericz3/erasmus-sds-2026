@@ -132,7 +132,7 @@ export default function ItineraryPage({
                           {item.duration > 0 && (
                             <>
                               <span className="travel-icon">{icon}</span>
-                              <span className="travel-label">{item.duration} min {modeLabel}</span>
+                              <span className="travel-label">{item.actualMinutes ?? item.duration} min {modeLabel}</span>
                               {item.distanceKm !== null && item.distanceKm !== undefined && (
                                 <span className="travel-distance">{item.distanceKm} km</span>
                               )}
