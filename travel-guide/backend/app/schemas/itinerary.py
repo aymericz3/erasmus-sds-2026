@@ -76,3 +76,22 @@ class OptimizedItineraryRequest(BaseModel):
     # Optional list of attractions pinned to a specific day (and optionally a time).
     # Example: [{"place_id": 5, "day": 1, "time": "14:00"}]
     pins: Optional[List[AttractionPin]] = None
+
+
+# ---------------------------------------------------------------------------
+# Google finalization — POST /itinerary/finalize
+# Called once the user is happy with the ordering. Replaces haversine estimates
+# with real Google Distance Matrix times for the selected transport mode.
+# ---------------------------------------------------------------------------
+
+class FinalizeDayInput(BaseModel):
+    # One day's worth of ordered place_ids as confirmed by the user.
+    place_ids: List[int]
+    start_time: str = "09:00"
+    # Per-gap break durations (same length as place_ids - 1). None = no break.
+    break_durations: Optional[List[Optional[int]]] = None
+
+
+class FinalizeRequest(BaseModel):
+    days: List[FinalizeDayInput]
+    transport_mode: str = "walking"  # applied to all legs

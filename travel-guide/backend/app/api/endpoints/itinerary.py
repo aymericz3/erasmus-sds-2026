@@ -2,14 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.place import Place
-from app.schemas.itinerary import ItineraryRequest, ItineraryPlanRequest, OptimizedItineraryRequest
+from app.schemas.itinerary import (
+    ItineraryRequest, ItineraryPlanRequest,
+    OptimizedItineraryRequest, FinalizeRequest,
+)
 from app.services.planner_service import (
     schedule_itinerary,
     build_daily_itinerary,
     build_optimized_itinerary,
     place_to_attraction,
     rank_attractions,
+    _compute_day_items,
+    _duration_minutes,
 )
+from app.services.transport_service import get_single_travel_time
 
 router = APIRouter()
 
@@ -87,7 +93,7 @@ async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depend
 #   Step 3 (done):  validation warnings (intensity vs window, inter-day rest)
 #   Step 4 (done):  anchor resolution (Stary Rynek default, prev/next day logic)
 #   Step 5 (done):  route optimization (nearest-neighbor + 2-opt)
-#   Step 6:         Google finalization endpoint for accurate travel times
+#   Step 6 (done):  Google finalization endpoint for accurate travel times
 # ---------------------------------------------------------------------------
 @router.post("/plan-optimized")
 async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depends(get_db)):
@@ -115,3 +121,68 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
         break_duration_minutes=request.break_duration_minutes,
         days_config=days_config,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /itinerary/finalize
+# Called once the user approves the ordering from /plan-optimized.
+# Replaces haversine travel estimates with real Google Distance Matrix times
+# for the selected transport mode. Returns the same days shape so the frontend
+# can swap the displayed times without changing its data model.
+# ---------------------------------------------------------------------------
+@router.post("/finalize")
+async def finalize_itinerary(request: FinalizeRequest, db: Session = Depends(get_db)):
+    # Collect all place_ids across all days in one DB query.
+    all_ids = [pid for day in request.days for pid in day.place_ids]
+    places  = db.query(Place).filter(Place.id.in_(all_ids)).all()
+    if not places:
+        raise HTTPException(status_code=404, detail="No places found for given IDs")
+    by_id = {p.id: place_to_attraction(p) for p in places}
+
+    result_days = []
+    for day_input in request.days:
+        atts = [by_id[pid] for pid in day_input.place_ids if pid in by_id]
+
+        travel_minutes, travel_km, sources = [], [], []
+        for i in range(len(atts) - 1):
+            a, b = atts[i], atts[i + 1]
+            if a["latitude"] and a["longitude"] and b["latitude"] and b["longitude"]:
+                leg = get_single_travel_time(
+                    a["latitude"], a["longitude"],
+                    b["latitude"], b["longitude"],
+                    request.transport_mode,
+                )
+                travel_minutes.append(leg["minutes"])
+                travel_km.append(leg["distance_km"])
+                sources.append(leg["source"])
+            else:
+                # Missing coordinates — keep a zero placeholder.
+                travel_minutes.append(0)
+                travel_km.append(None)
+                sources.append("estimate")
+
+        break_durations = day_input.break_durations or [None] * max(0, len(atts) - 1)
+        items = _compute_day_items(atts, travel_minutes, break_durations, day_input.start_time, travel_km)
+
+        # Tag each travel item with its source (google / estimate).
+        for item in items:
+            if item["type"] == "travel":
+                item["source"] = sources[item["gapIndex"]] if item["gapIndex"] < len(sources) else "estimate"
+
+        total = sum(
+            _duration_minutes(item.get("duration")) if item["type"] == "attraction"
+            else item["duration"]
+            for item in items
+        )
+
+        result_days.append({
+            "attractions":    atts,
+            "travelMinutes":  travel_minutes,
+            "travelKm":       travel_km,
+            "breakDurations": break_durations,
+            "items":          items,
+            "totalMinutes":   total,
+            "transportMode":  request.transport_mode,
+        })
+
+    return {"days": result_days}

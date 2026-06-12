@@ -61,6 +61,32 @@ def _call_google(origin_lat, origin_lon, dest_lat, dest_lon, mode_key: str) -> d
         return None
 
 
+def get_single_travel_time(
+    origin_lat: float, origin_lon: float,
+    dest_lat: float, dest_lon: float,
+    mode: str = "walking",
+) -> dict:
+    """
+    Return travel time and distance for a single mode between two coordinates.
+    Used by the finalize endpoint to replace haversine estimates with Google times
+    one leg at a time, for the mode the user actually selected.
+    Falls back to haversine if the Google API is unavailable or returns an error.
+
+    Returns: {"minutes": int, "distance_km": float, "source": "google"|"estimate"}
+    """
+    if mode not in _GOOGLE_MODES:
+        mode = "walking"
+    km     = _haversine_km(origin_lat, origin_lon, dest_lat, dest_lon)
+    google = _call_google(origin_lat, origin_lon, dest_lat, dest_lon, mode)
+    if google:
+        return {**google, "source": "google"}
+    return {
+        "minutes":     _fallback_minutes(km, mode),
+        "distance_km": round(km, 2),
+        "source":      "estimate",
+    }
+
+
 def get_travel_times(origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float) -> dict:
     """
     Return travel time and distance for all 4 modes between two coordinates.
