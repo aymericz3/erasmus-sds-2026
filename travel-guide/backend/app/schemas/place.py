@@ -19,4 +19,9 @@ class PlaceOut(BaseModel):
     latitude:      Optional[float] = None
     longitude:     Optional[float] = None
 
+    # Enrichment fields (OpenStreetMap + Wikipedia)
+    address:           Optional[str] = None
+    website:           Optional[str] = None
+    image_attribution: Optional[str] = None
+
     model_config = {"from_attributes": True}

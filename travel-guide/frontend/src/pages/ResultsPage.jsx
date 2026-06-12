@@ -1,14 +1,32 @@
+import { useState } from "react";
 import { CATEGORIES } from "../constants";
+import ErrorMessage from "../components/ErrorMessage";
+import LoadingMessage from "../components/LoadingMessage";
 import ResultsMap from "../components/ResultsMap";
+
+function getAttractionName(attraction) {
+  return attraction.name_en || attraction.name_pl || "Unnamed attraction";
+}
 
 export default function ResultsPage({
   attractions, selectedAttractions, selectedCategories, allCategoriesSelected,
-  onToggleAttraction, onToggleCategory, onToggleAllCategories,
-  onBack, onGenerateItinerary,
+  isLoadingAttractions, attractionsError,
+  onRetryAttractions, onToggleAttraction, onToggleCategory, onToggleAllCategories,
+  onShowAttractionDetails, onBack, onGenerateItinerary,
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredBySearch = searchQuery.trim()
+    ? attractions.filter((a) =>
+        getAttractionName(a).toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : attractions;
+
+  const hasAttractions = !isLoadingAttractions && !attractionsError && attractions.length > 0;
+
   return (
     <section className="results">
-      <button className="back" onClick={onBack}>← Back to Categories</button>
+      <button className="back" onClick={onBack}>Back to Categories</button>
 
       <div className="results-header">
         <div>
@@ -42,40 +60,94 @@ export default function ResultsPage({
         ))}
       </div>
 
+      <div className="search-bar">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search attractions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="search-clear" onClick={() => setSearchQuery("")} title="Clear search">×</button>
+        )}
+      </div>
+
       <div className="results-layout">
-        <div className="cards">
-          {attractions.map((attraction) => {
+        <div className={hasAttractions ? "cards" : "cards cards-status"}>
+          {isLoadingAttractions && <LoadingMessage message="Loading attractions..." />}
+
+          {attractionsError && (
+            <ErrorMessage
+              message={attractionsError}
+              onRetry={onRetryAttractions}
+            />
+          )}
+
+          {!isLoadingAttractions && !attractionsError && attractions.length === 0 && (
+            <div className="status-message empty-message">No attractions found.</div>
+          )}
+
+          {!isLoadingAttractions && !attractionsError && attractions.length > 0 && filteredBySearch.length === 0 && (
+            <div className="status-message empty-message">No attractions match your search.</div>
+          )}
+
+          {hasAttractions && filteredBySearch.map((attraction) => {
             const isSelected = selectedAttractions.some((a) => a.id === attraction.id);
             return (
-              <div key={attraction.id} className={isSelected ? "card selected" : "card"}>
-                <img src={attraction.image_url} alt={attraction.name_en} />
+              <div
+                key={attraction.id}
+                className={isSelected ? "card selected card-clickable" : "card card-clickable"}
+                onClick={() => onShowAttractionDetails(attraction)}
+              >
+                {attraction.image_url ? (
+                  <img src={attraction.image_url} alt={getAttractionName(attraction)} />
+                ) : (
+                  <div className="card-image-placeholder">No image available</div>
+                )}
                 <div className="card-body">
                   <div className="tags"><span>{attraction.category}</span></div>
-                  <h3>{attraction.name_en || attraction.name_pl}</h3>
+                  <h3>{getAttractionName(attraction)}</h3>
                   <p>{attraction.description}</p>
                   <div className="info">
                     <span>{attraction.duration}</span>
                     <span>{attraction.price_range}</span>
                   </div>
-                  <button
-                    className={isSelected ? "selected-btn" : "select-btn"}
-                    onClick={() => onToggleAttraction(attraction)}
-                  >
-                    {isSelected ? "Selected" : "Select"}
-                  </button>
+                  <div className="card-actions">
+                    <button
+                      className="details-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShowAttractionDetails(attraction);
+                      }}
+                    >
+                      Details
+                    </button>
+                    <button
+                      className={isSelected ? "selected-btn" : "select-btn"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleAttraction(attraction);
+                      }}
+                    >
+                      {isSelected ? "Selected" : "Select"}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
 
-        <div className="results-map-panel">
-          <ResultsMap
-            attractions={attractions}
-            selectedAttractions={selectedAttractions}
-            onToggle={onToggleAttraction}
-          />
-        </div>
+        {hasAttractions && (
+          <div className="results-map-panel">
+            <ResultsMap
+              attractions={attractions}
+              selectedAttractions={selectedAttractions}
+              onToggle={onToggleAttraction}
+            />
+          </div>
+        )}
       </div>
     </section>
   );
