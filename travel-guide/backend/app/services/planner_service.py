@@ -443,6 +443,77 @@ def _check_inter_day_rest(day_index: int, days: list[dict], resolved: list[dict]
     return None
 
 
+# Default city-centre anchor used when no explicit start/end is provided.
+_CITY_CENTRE = {"latitude": 52.40825, "longitude": 16.93364}  # Stary Rynek
+
+
+def _resolve_anchors(
+    num_days: int,
+    days_config: list | None,
+    days: list[dict],
+) -> list[dict]:
+    """
+    Determine the start and end anchor for each day following these rules:
+
+    Start anchor priority (per day):
+      1. Explicit start_anchor in days_config for this day
+      2. Day 1 → city centre (Stary Rynek)
+         Day 2+ → previous day's explicit end_anchor if set,
+                  otherwise last attraction of the previous day
+
+    End anchor priority (per day):
+      1. Explicit end_anchor in days_config for this day
+      2. Last day → city centre (Stary Rynek)
+         Middle days → next day's explicit start_anchor if set,
+                       otherwise None (optimizer is free to end anywhere)
+
+    Returns a list of {"start": dict|None, "end": dict|None} per day.
+    The dicts have "latitude"/"longitude" keys so _haversine_* functions work directly.
+    """
+    def _cfg(day_index):
+        if days_config and day_index < len(days_config):
+            return days_config[day_index] or {}
+        return {}
+
+    def _anchor_coords(anchor_dict):
+        if not anchor_dict:
+            return None
+        return {"latitude": anchor_dict["lat"], "longitude": anchor_dict["lon"]}
+
+    anchors = []
+    for i in range(num_days):
+        cfg      = _cfg(i)
+        cfg_next = _cfg(i + 1) if i < num_days - 1 else {}
+
+        # --- start anchor ---
+        if cfg.get("start_anchor"):
+            start = _anchor_coords(cfg["start_anchor"])
+        elif i == 0:
+            start = _CITY_CENTRE
+        else:
+            prev_cfg = _cfg(i - 1)
+            if prev_cfg.get("end_anchor"):
+                start = _anchor_coords(prev_cfg["end_anchor"])
+            else:
+                prev_attractions = days[i - 1]["attractions"]
+                start = prev_attractions[-1] if prev_attractions else _CITY_CENTRE
+
+        # --- end anchor ---
+        if cfg.get("end_anchor"):
+            end = _anchor_coords(cfg["end_anchor"])
+        elif i == num_days - 1:
+            end = _CITY_CENTRE
+        else:
+            if cfg_next.get("start_anchor"):
+                end = _anchor_coords(cfg_next["start_anchor"])
+            else:
+                end = None  # optimizer is free
+
+        anchors.append({"start": start, "end": end})
+
+    return anchors
+
+
 def _resolve_day_settings(
     day_index: int,
     global_start: str,
@@ -505,8 +576,8 @@ def build_optimized_itinerary(
     Steps still to be added (see endpoints/itinerary.py for the full roadmap):
     - Pinned attractions: pre-assign specific place_ids to specific days before
       the greedy loop runs (place_ids in pins are removed from the free pool).
-    - Anchor resolution: Stary Rynek default, prev/next day handoff logic.
-    - Route optimisation: nearest-neighbour + 2-opt within each day.
+    - Route optimisation: nearest-neighbour + 2-opt within each day,
+      consuming startAnchor/endAnchor already resolved on each day dict.
     """
     speed    = get_transport_speed(transport_mode)
     resolved = [
@@ -567,6 +638,16 @@ def build_optimized_itinerary(
             day["totalMinutes"] += duration
         else:
             overflow.append(attraction)
+
+    # Resolve anchors after packing — start anchors for day 2+ may depend on
+    # the last attraction placed in the previous day.
+    anchors = _resolve_anchors(num_days, days_config, days)
+    for i, day in enumerate(days):
+        day["startAnchor"] = anchors[i]["start"]
+        day["endAnchor"]   = anchors[i]["end"]
+
+    # TODO (route optimisation step): re-order day["attractions"] here using
+    # anchors[i]["start"] and anchors[i]["end"] before computing items.
 
     for i, day in enumerate(days):
         day["items"] = _compute_day_items(

@@ -85,8 +85,8 @@ async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depend
 #   Step 1 (done):  schema + skeleton
 #   Step 2 (done):  per-day time windows + per-day intensity
 #   Step 3 (done):  validation warnings (intensity vs window, inter-day rest)
-#   Step 4:         anchor resolution (Stary Rynek default, prev/next day logic)
-#   Step 5:         route optimization (nearest-neighbor + 2-opt)
+#   Step 4 (done):  anchor resolution (Stary Rynek default, prev/next day logic)
+#   Step 5 (next):  route optimization (nearest-neighbor + 2-opt)
 #   Step 6:         Google finalization endpoint for accurate travel times
 # ---------------------------------------------------------------------------
 @router.post("/plan-optimized")
