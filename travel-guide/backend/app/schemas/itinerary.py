@@ -53,14 +53,26 @@ class DayConfig(BaseModel):
     end_anchor: Optional[Coordinates] = None    # where the day should end
 
 
+class AttractionPin(BaseModel):
+    # Guarantees a specific attraction appears on a specific day.
+    # The attraction is removed from the free pool before the greedy packer runs,
+    # so it is always placed on the requested day regardless of time budget.
+    place_id: int
+    day: int                    # 0-indexed (0 = first day)
+    time: Optional[str] = None  # "14:00" — if set, attraction is scheduled at this exact time
+
+
 class OptimizedItineraryRequest(BaseModel):
     place_ids: List[int]                   # unordered pool — backend determines visit order
     num_days: int = 1
     intensity: str = "moderate"            # global default, can be overridden per day
     start_time: str = "09:00"             # global default daily start
-    end_time: str = "17:00"              # global default daily end (new: replaces max_minutes)
+    end_time: str = "17:00"               # global default daily end (replaces max_minutes)
     transport_mode: str = "walking"        # default for all legs, per-leg override coming later
     break_duration_minutes: int = 30
     # Optional list of per-day configs. Can be null for a day to use all globals.
     # Example: [{"start_anchor": {"lat": 52.4, "lon": 16.9}}, null, null]
     days_config: Optional[List[Optional[DayConfig]]] = None
+    # Optional list of attractions pinned to a specific day (and optionally a time).
+    # Example: [{"place_id": 5, "day": 1, "time": "14:00"}]
+    pins: Optional[List[AttractionPin]] = None

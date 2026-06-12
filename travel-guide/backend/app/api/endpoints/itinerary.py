@@ -6,6 +6,7 @@ from app.schemas.itinerary import ItineraryRequest, ItineraryPlanRequest, Optimi
 from app.services.planner_service import (
     schedule_itinerary,
     build_daily_itinerary,
+    build_optimized_itinerary,
     place_to_attraction,
     rank_attractions,
 )
@@ -81,9 +82,9 @@ async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depend
 # Backend-driven itinerary planner. Receives an unordered pool of place_ids
 # and handles ordering, time windows, per-day intensity, anchor-based routing,
 # and validation warnings. Steps added incrementally:
-#   Step 1 (now):   schema + skeleton, delegates to build_daily_itinerary
-#   Step 2 (next):  per-day time windows + per-day intensity
-#   Step 3:         validation warnings (intensity vs window, inter-day rest)
+#   Step 1 (done):  schema + skeleton
+#   Step 2 (now):   per-day time windows + per-day intensity
+#   Step 3 (next):  validation warnings (intensity vs window, inter-day rest)
 #   Step 4:         anchor resolution (Stary Rynek default, prev/next day logic)
 #   Step 5:         route optimization (nearest-neighbor + 2-opt)
 #   Step 6:         Google finalization endpoint for accurate travel times
@@ -98,13 +99,21 @@ async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depen
     by_id = {p.id: p for p in places}
     attractions = [place_to_attraction(by_id[pid]) for pid in request.place_ids if pid in by_id]
 
-    result = build_daily_itinerary(
+    # Serialize days_config to plain dicts so planner_service has no Pydantic dependency.
+    days_config = [
+        dc.model_dump() if dc is not None else None
+        for dc in request.days_config
+    ] if request.days_config else None
+
+    result = build_optimized_itinerary(
         attractions,
         num_days=request.num_days,
-        intensity=request.intensity,
-        start_time=request.start_time,
-        break_duration_minutes=request.break_duration_minutes,
+        global_intensity=request.intensity,
+        global_start_time=request.start_time,
+        global_end_time=request.end_time,
         transport_mode=request.transport_mode,
+        break_duration_minutes=request.break_duration_minutes,
+        days_config=days_config,
     )
 
     # warnings will be populated in Step 3
