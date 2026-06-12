@@ -347,6 +347,7 @@ function App() {
           onAddBreak={addBreak}
           onRemoveBreak={removeBreak}
           onChangeBreakDuration={changeBreakDuration}
+          onShowAttractionDetails={setSelectedAttractionDetails}
         />
       )}
 

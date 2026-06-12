@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CATEGORIES } from "../constants";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingMessage from "../components/LoadingMessage";
@@ -13,6 +14,14 @@ export default function ResultsPage({
   onRetryAttractions, onToggleAttraction, onToggleCategory, onToggleAllCategories,
   onShowAttractionDetails, onBack, onGenerateItinerary,
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredBySearch = searchQuery.trim()
+    ? attractions.filter((a) =>
+        getAttractionName(a).toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : attractions;
+
   const hasAttractions = !isLoadingAttractions && !attractionsError && attractions.length > 0;
 
   return (
@@ -51,6 +60,19 @@ export default function ResultsPage({
         ))}
       </div>
 
+      <div className="search-bar">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search attractions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button className="search-clear" onClick={() => setSearchQuery("")} title="Clear search">×</button>
+        )}
+      </div>
+
       <div className="results-layout">
         <div className={hasAttractions ? "cards" : "cards cards-status"}>
           {isLoadingAttractions && <LoadingMessage message="Loading attractions..." />}
@@ -66,7 +88,11 @@ export default function ResultsPage({
             <div className="status-message empty-message">No attractions found.</div>
           )}
 
-          {hasAttractions && attractions.map((attraction) => {
+          {!isLoadingAttractions && !attractionsError && attractions.length > 0 && filteredBySearch.length === 0 && (
+            <div className="status-message empty-message">No attractions match your search.</div>
+          )}
+
+          {hasAttractions && filteredBySearch.map((attraction) => {
             const isSelected = selectedAttractions.some((a) => a.id === attraction.id);
             return (
               <div
