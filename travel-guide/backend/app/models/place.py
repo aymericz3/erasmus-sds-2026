@@ -20,3 +20,11 @@ class Place(Base):
     image_url     = Column(Text)
     latitude      = Column(Float)
     longitude     = Column(Float)
+
+    # Enrichment fields (OpenStreetMap + Wikipedia) — see scripts/enrich_places.py
+    address           = Column(Text)
+    website           = Column(Text)
+    osm_id            = Column(Text)
+    wikipedia_title   = Column(Text)
+    image_attribution = Column(Text)
+    source            = Column(Text)

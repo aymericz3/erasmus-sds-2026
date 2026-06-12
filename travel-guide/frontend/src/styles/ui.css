@@ -81,6 +81,34 @@
   font-weight: 700;
 }
 
+.schedule-alert {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 14px;
+}
+
+.schedule-alert.critical,
+.day-warning.critical {
+  background: #fff1f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.schedule-alert ul,
+.day-warning ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.schedule-alert li,
+.day-warning li {
+  margin: 4px 0;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
