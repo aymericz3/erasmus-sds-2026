@@ -41,6 +41,9 @@ class ItineraryRequest(BaseModel):
     # Optional list of attractions pinned to a specific day (and optionally a time).
     # Example: [{"place_id": 5, "day": 1, "time": "14:00"}]
     pins: Optional[List[AttractionPin]] = None
+    # User's preferred categories — attractions in these categories are packed first
+    # so they survive the overflow cut when the time budget is tight.
+    selected_categories: Optional[List[str]] = None
 
 
 # ---------------------------------------------------------------------------

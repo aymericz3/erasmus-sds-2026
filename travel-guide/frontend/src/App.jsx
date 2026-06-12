@@ -162,6 +162,7 @@ function App() {
         end_time: endTime,
         transport_mode: transportMode,
         break_duration_minutes: 30,
+        selected_categories: selectedCategories,
       });
       setItineraryDays(result);
       setPage("itinerary");
@@ -183,6 +184,7 @@ function App() {
         end_time: endTime,
         transport_mode: transportMode,
         break_duration_minutes: 30,
+        selected_categories: selectedCategories,
       });
       setItineraryDays(result);
       setScheduleNotice("");

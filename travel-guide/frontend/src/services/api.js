@@ -57,6 +57,7 @@ export function planItinerary({
   end_time = "21:00",
   transport_mode = "walking",
   break_duration_minutes = 30,
+  selected_categories = [],
 }) {
   return request("/itinerary/plan", {
     method: "POST",
@@ -68,6 +69,7 @@ export function planItinerary({
       end_time,
       transport_mode,
       break_duration_minutes,
+      selected_categories,
     }),
   });
 }

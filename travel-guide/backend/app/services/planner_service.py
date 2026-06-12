@@ -529,6 +529,7 @@ def build_itinerary(
     break_duration_minutes: int = 30,
     days_config: list | None = None,
     pins: list | None = None,
+    selected_categories: list | None = None,
 ) -> dict:
     """
     Greedy multi-day packer with route optimisation and per-day configuration.
@@ -608,7 +609,13 @@ def build_itinerary(
             pinned_ids.add(place_id)
 
     # Free pool: all attractions not already pinned to a specific day.
-    free_attractions = [a for a in attractions if a["id"] not in pinned_ids]
+    # Sort preferred categories first so they win the overflow cut when the
+    # time budget is tight — non-preferred attractions are the ones left out.
+    preferred = set(selected_categories) if selected_categories else set()
+    free_attractions = sorted(
+        [a for a in attractions if a["id"] not in pinned_ids],
+        key=lambda a: 0 if a.get("category") in preferred else 1,
+    )
 
     for attraction in free_attractions:
         duration = _duration_minutes(attraction.get("duration"))
