@@ -1,6 +1,9 @@
 .DS_Store
 **/.env
 
+# Enrichment script cache (re-creatable from OSM/Wikipedia)
+**/.enrich_cache.json
+
 # Python
 __pycache__/
 **/__pycache__/
