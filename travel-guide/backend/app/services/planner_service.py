@@ -61,7 +61,20 @@ def schedule_itinerary(places, total_minutes, start_time="09:00", break_duration
         })
 
     return plan
+  
+def rank_attractions(places, selected_categories: list) -> list:
+    if not selected_categories:
+        return places
 
+    ranked_places = []
+    for place in places:
+        weight = 0
+        if place.category in selected_categories:
+            weight = 100
+        ranked_places.append((weight, place))
+
+    ranked_places.sort(key=lambda x: x[0], reverse=True)
+    return [p[1] for p in ranked_places]
 
 # ---------------------------------------------------------------------------
 # Multi-day planner
