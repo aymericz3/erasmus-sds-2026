@@ -12,7 +12,7 @@ export default function ResultsPage({
   attractions, selectedAttractions, selectedCategories, allCategoriesSelected,
   isLoadingAttractions, attractionsError,
   onRetryAttractions, onToggleAttraction, onToggleCategory, onToggleAllCategories,
-  onShowAttractionDetails, onBack, onGenerateItinerary,
+  onShowAttractionDetails, onBack, onGenerateItinerary, isGeneratingItinerary,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -35,10 +35,10 @@ export default function ResultsPage({
         </div>
         <button
           className="primary"
-          disabled={selectedAttractions.length === 0}
+          disabled={selectedAttractions.length === 0 || isGeneratingItinerary}
           onClick={onGenerateItinerary}
         >
-          Generate Itinerary
+          {isGeneratingItinerary ? "Planning…" : "Generate Itinerary"}
         </button>
       </div>
 
