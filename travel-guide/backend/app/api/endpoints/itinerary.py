@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.place import Place
-from app.schemas.itinerary import ItineraryRequest, ItineraryPlanRequest
+from app.schemas.itinerary import ItineraryRequest, ItineraryPlanRequest, OptimizedItineraryRequest
 from app.services.planner_service import (
     schedule_itinerary,
     build_daily_itinerary,
@@ -12,6 +12,14 @@ from app.services.planner_service import (
 
 router = APIRouter()
 
+
+# ---------------------------------------------------------------------------
+# OBSOLETE — POST /itinerary/plan
+# Sprint 1 single-day scheduler. Takes a flat total_minutes cap and returns
+# a list of attractions that fit within it. No travel time, no multi-day,
+# no transport mode. The frontend never calls this; kept only for reference.
+# Remove together with ItineraryRequest once /plan-optimized is live.
+# ---------------------------------------------------------------------------
 @router.post("/plan")
 async def create_plan(request: ItineraryRequest, db: Session = Depends(get_db)):
     places = db.query(Place).filter(Place.id.in_(request.place_ids)).all()
@@ -40,12 +48,15 @@ async def create_plan(request: ItineraryRequest, db: Session = Depends(get_db)):
     }
 
 
+# ---------------------------------------------------------------------------
+# TO BE REPLACED — POST /itinerary/generate
+# Sprint 2 I3 multi-day planner. Accepts place_ids in the order the frontend
+# sent them (click order) and packs them greedily into days.
+# Will be replaced by /plan-optimized once the frontend is updated.
+# Remove together with ItineraryPlanRequest at that point.
+# ---------------------------------------------------------------------------
 @router.post("/generate")
 async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depends(get_db)):
-    """
-    Build a full multi-day itinerary (clock times, travel, breaks, overflow).
-    place_ids order is preserved so the greedy packer respects the user's selection.
-    """
     places = db.query(Place).filter(Place.id.in_(request.place_ids)).all()
 
     if not places:
@@ -63,3 +74,39 @@ async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depend
         break_duration_minutes=request.break_duration_minutes,
         transport_mode=request.transport_mode,
     )
+
+
+# ---------------------------------------------------------------------------
+# CURRENT — POST /itinerary/plan-optimized
+# Backend-driven itinerary planner. Receives an unordered pool of place_ids
+# and handles ordering, time windows, per-day intensity, anchor-based routing,
+# and validation warnings. Steps added incrementally:
+#   Step 1 (now):   schema + skeleton, delegates to build_daily_itinerary
+#   Step 2 (next):  per-day time windows + per-day intensity
+#   Step 3:         validation warnings (intensity vs window, inter-day rest)
+#   Step 4:         anchor resolution (Stary Rynek default, prev/next day logic)
+#   Step 5:         route optimization (nearest-neighbor + 2-opt)
+#   Step 6:         Google finalization endpoint for accurate travel times
+# ---------------------------------------------------------------------------
+@router.post("/plan-optimized")
+async def plan_optimized(request: OptimizedItineraryRequest, db: Session = Depends(get_db)):
+    places = db.query(Place).filter(Place.id.in_(request.place_ids)).all()
+
+    if not places:
+        raise HTTPException(status_code=404, detail="No places found for given IDs")
+
+    by_id = {p.id: p for p in places}
+    attractions = [place_to_attraction(by_id[pid]) for pid in request.place_ids if pid in by_id]
+
+    result = build_daily_itinerary(
+        attractions,
+        num_days=request.num_days,
+        intensity=request.intensity,
+        start_time=request.start_time,
+        break_duration_minutes=request.break_duration_minutes,
+        transport_mode=request.transport_mode,
+    )
+
+    # warnings will be populated in Step 3
+    result["warnings"] = []
+    return result
