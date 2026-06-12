@@ -110,31 +110,40 @@ function App() {
 
   const currentPreferences = {
     selectedCategories,
-    arrivalDate,
-    numDays,
     startTime,
     intensity,
     transportMode,
+    breakDurationMinutes: 30,
   };
 
   const handleSavePreferences = async () => {
-    const result = await savePreferences(currentPreferences);
-    setPreferenceStatus(result.message);
+    try {
+      await savePreferences(currentPreferences);
+      setPreferenceStatus("Preferences saved successfully.");
+    } catch {
+      setPreferenceStatus("Could not save preferences. Please check that the backend is running.");
+    }
   };
 
   const handleLoadPreferences = async () => {
-    const result = await loadPreferences();
+    try {
+      const result = await loadPreferences(1);
 
-    if (result.available && result.preferences) {
-      setSelectedCategories(result.preferences.selectedCategories ?? []);
-      setArrivalDate(result.preferences.arrivalDate ?? "");
-      setNumDays(result.preferences.numDays ?? 1);
-      setStartTime(result.preferences.startTime ?? "09:00");
-      setIntensity(result.preferences.intensity ?? "moderate");
-      setTransportMode(result.preferences.transportMode ?? "walking");
+      if (result.preferences) {
+        setSelectedCategories(result.preferences.selectedCategories ?? []);
+        setStartTime(result.preferences.startTime ?? "09:00");
+        setIntensity(result.preferences.intensity ?? "moderate");
+        setTransportMode(result.preferences.transportMode ?? "walking");
+      }
+
+      setPreferenceStatus(
+        result.is_new_user
+          ? "No saved preferences found yet. You can create them now."
+          : "Preferences loaded successfully."
+      );
+    } catch {
+      setPreferenceStatus("Could not load preferences. Please check that the backend is running.");
     }
-
-    setPreferenceStatus(result.message);
   };
 
   const generateItinerary = () => {
