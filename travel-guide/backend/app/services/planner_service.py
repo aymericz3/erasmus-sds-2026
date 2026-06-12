@@ -447,6 +447,118 @@ def _check_inter_day_rest(day_index: int, days: list[dict], resolved: list[dict]
 _CITY_CENTRE = {"latitude": 52.40825, "longitude": 16.93364}  # Stary Rynek
 
 
+def _km_cached(a, b, cache: dict | None) -> float | None:
+    """
+    Return km between two points, using the pre-built distance cache when both
+    points carry an 'id' key (i.e. they are attraction dicts, not raw anchors).
+    Falls back to haversine for anchor points that have no id.
+    """
+    if cache is not None and a and b:
+        a_id = a.get("id")
+        b_id = b.get("id")
+        if a_id is not None and b_id is not None:
+            return cache.get((a_id, b_id))
+    return _haversine_km(a, b)
+
+
+def _route_distance(attractions: list[dict], start_anchor, end_anchor, speed: int,
+                    cache: dict | None = None) -> int:
+    """
+    Total estimated travel time for a route: start_anchor → attractions → end_anchor.
+    end_anchor may be None (open end), in which case only the inter-attraction legs count.
+    Used as the objective function for 2-opt.
+    """
+    total = 0
+    prev  = start_anchor
+    for a in attractions:
+        km     = _km_cached(prev, a, cache)
+        total += int(math.ceil((km / speed) * 60 / 5) * 5) if km else 0
+        prev   = a
+    if end_anchor:
+        km     = _km_cached(prev, end_anchor, cache)
+        total += int(math.ceil((km / speed) * 60 / 5) * 5) if km else 0
+    return total
+
+
+def _nearest_neighbour(
+    attractions: list[dict],
+    start_anchor,
+    cache: dict | None = None,
+) -> list[dict]:
+    """
+    Greedy nearest-neighbour ordering starting from start_anchor.
+    At each step, pick the unvisited attraction closest (in km) to the current
+    position. Speed is not needed here — all legs share the same speed so
+    closest km == closest time. Uses dist_cache for attraction-to-attraction lookups.
+    """
+    if not attractions:
+        return []
+
+    unvisited = list(attractions)
+    ordered   = []
+    current   = start_anchor
+
+    while unvisited:
+        nearest = min(unvisited, key=lambda a: (
+            _km_cached(current, a, cache) or _haversine_km(current, a) or 0
+        ))
+        ordered.append(nearest)
+        unvisited.remove(nearest)
+        current = nearest
+
+    return ordered
+
+
+def _two_opt(
+    attractions: list[dict],
+    start_anchor,
+    end_anchor,
+    speed: int,
+    cache: dict | None = None,
+) -> list[dict]:
+    """
+    Improve a route by trying all pairs of edge swaps (2-opt).
+    Reverses the sub-sequence between indices i and k whenever doing so reduces
+    the total route distance. Stops when no improving swap is found.
+    The start_anchor and end_anchor are included in the distance objective so the
+    route stays anchored to them even after swaps.
+    """
+    best     = list(attractions)
+    improved = True
+    while improved:
+        improved = False
+        best_dist = _route_distance(best, start_anchor, end_anchor, speed, cache)
+        for i in range(len(best) - 1):
+            for k in range(i + 1, len(best)):
+                candidate      = best[:i] + best[i:k + 1][::-1] + best[k + 1:]
+                candidate_dist = _route_distance(candidate, start_anchor, end_anchor, speed, cache)
+                if candidate_dist < best_dist:
+                    best      = candidate
+                    best_dist = candidate_dist
+                    improved  = True
+
+
+    return best
+
+
+def _optimise_day_order(
+    attractions: list[dict],
+    start_anchor,
+    end_anchor,
+    speed: int,
+    cache: dict | None = None,
+) -> list[dict]:
+    """
+    Return attractions in the optimised visiting order for one day.
+    Runs nearest-neighbour first (fast, good starting point), then 2-opt
+    (removes route crossings). Both respect the start and end anchors.
+    """
+    if len(attractions) <= 1:
+        return attractions
+    ordered = _nearest_neighbour(attractions, start_anchor, cache)
+    return _two_opt(ordered, start_anchor, end_anchor, speed, cache)
+
+
 def _resolve_anchors(
     num_days: int,
     days_config: list | None,
@@ -579,7 +691,20 @@ def build_optimized_itinerary(
     - Route optimisation: nearest-neighbour + 2-opt within each day,
       consuming startAnchor/endAnchor already resolved on each day dict.
     """
-    speed    = get_transport_speed(transport_mode)
+    speed = get_transport_speed(transport_mode)
+
+    # Pre-build pairwise haversine distance matrix (km) for all attractions.
+    # Keyed by (id_a, id_b); symmetric so both directions are stored.
+    # The optimizer functions look up from this cache instead of recomputing,
+    # which matters most in the 2-opt inner loop (O(N²) evaluations per pass).
+    dist_cache: dict = {}
+    for a in attractions:
+        for b in attractions:
+            if a["id"] != b["id"] and (a["id"], b["id"]) not in dist_cache:
+                km = _haversine_km(a, b)
+                dist_cache[(a["id"], b["id"])] = km
+                dist_cache[(b["id"], a["id"])] = km
+
     resolved = [
         _resolve_day_settings(i, global_start_time, global_end_time, global_intensity, days_config)
         for i in range(num_days)
@@ -646,8 +771,40 @@ def build_optimized_itinerary(
         day["startAnchor"] = anchors[i]["start"]
         day["endAnchor"]   = anchors[i]["end"]
 
-    # TODO (route optimisation step): re-order day["attractions"] here using
-    # anchors[i]["start"] and anchors[i]["end"] before computing items.
+    # Re-order each day's attractions using nearest-neighbour + 2-opt, then
+    # recompute travel/break/total from the new order.
+    for i, day in enumerate(days):
+        if len(day["attractions"]) > 1:
+            day["attractions"] = _optimise_day_order(
+                day["attractions"],
+                anchors[i]["start"],
+                anchors[i]["end"],
+                speed,
+                dist_cache,
+            )
+
+        # Recompute travel and break arrays from the optimised order.
+        # Uses dist_cache for attraction-to-attraction legs.
+        is_relaxed = resolved[i]["intensity"] == "relaxed"
+        atts       = day["attractions"]
+        t_mins, t_km, b_durs, total = [], [], [], 0
+
+        for j, attr in enumerate(atts):
+            total += _duration_minutes(attr.get("duration"))
+            if j < len(atts) - 1:
+                km     = _km_cached(attr, atts[j + 1], dist_cache)
+                travel = int(math.ceil((km / speed) * 60 / 5) * 5) if km else 0
+                t_mins.append(travel)
+                t_km.append(_js_round2(km) if km is not None else None)
+                total += travel
+                b_durs.append(break_duration_minutes if is_relaxed else None)
+                if is_relaxed:
+                    total += break_duration_minutes
+
+        day["travelMinutes"]  = t_mins
+        day["travelKm"]       = t_km
+        day["breakDurations"] = b_durs
+        day["totalMinutes"]   = total
 
     for i, day in enumerate(days):
         day["items"] = _compute_day_items(
