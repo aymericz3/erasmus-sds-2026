@@ -111,3 +111,10 @@ export async function loadPreferences(userId = getPreferenceUserId()) {
       : null,
   };
 }
+
+export function finalizeItinerary({ days, transport_mode }) {
+  return request("/itinerary/finalize", {
+    method: "POST",
+    body: JSON.stringify({ days, transport_mode }),
+  });
+}

@@ -433,6 +433,81 @@ h1 {
   background: #dbeafe;
 }
 
+/* Source badge (Google / estimate) on travel legs */
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.source-badge--google {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.source-badge--estimate {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Finalize button */
+.finalize-btn {
+  margin-left: 8px;
+  padding: 8px 18px !important;
+  font-size: 14px;
+  background: #2563eb !important;
+}
+
+.finalize-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Pin row on attraction cards */
+.pin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.pin-label {
+  font-size: 12px;
+  color: #6b6b80;
+  font-weight: 600;
+}
+
+.pin-day-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #ddd;
+  background: #f7f7f8;
+  font-size: 12px;
+  font-weight: 700;
+  color: #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.1s;
+}
+
+.pin-day-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.pin-day-btn:hover:not(.active) {
+  background: #e0e7ff;
+}
+
 /* Search bar */
 .search-bar {
   position: relative;
