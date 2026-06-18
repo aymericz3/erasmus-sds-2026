@@ -12,6 +12,7 @@ Options:
     --days N               number of days (default 1)
     --intensity KEY        relaxed | moderate | intense (default moderate)
     --start HH:MM          daily start time (default 09:00)
+    --end HH:MM            daily end time (default 21:00)
     --break N              break minutes for relaxed days (default 30)
     --transport MODE       walking | cycling | transit (default walking)
 """
@@ -25,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.session import SessionLocal
 from app.models.place import Place
-from app.services.planner_service import build_daily_itinerary, place_to_attraction
+from app.services.planner_service import build_itinerary, place_to_attraction
 
 
 def list_places(db):
@@ -53,11 +54,15 @@ def print_plan(plan):
                 print(f"  {window}  📍 {name}  ({item.get('duration')})")
             elif t == "travel":
                 if item["duration"] > 0:
+                    actual = item.get("actualMinutes", item["duration"])
                     dist = f" · {item['distanceKm']} km" if item["distanceKm"] is not None else ""
-                    print(f"  {window}     ↳ travel {item['duration']} min{dist}")
+                    print(f"  {window}     ↳ travel ~{actual} min (gap {item['duration']} min){dist}")
             elif t == "break":
                 print(f"  {window}     ☕ break {item['duration']} min")
 
+    if plan.get("warnings"):
+        for w in plan["warnings"]:
+            print(f"\n⚠ {w.get('message', w)}")
     if plan["overflow"]:
         names = [a.get("name_en") or a.get("name_pl") for a in plan["overflow"]]
         print(f"\n⚠ Overflow (did not fit): {', '.join(names)}")
@@ -71,6 +76,7 @@ def main():
     parser.add_argument("--days", type=int, default=1)
     parser.add_argument("--intensity", type=str, default="moderate")
     parser.add_argument("--start", type=str, default="09:00")
+    parser.add_argument("--end", type=str, default="21:00")
     parser.add_argument("--break", dest="brk", type=int, default=30)
     parser.add_argument("--transport", type=str, default="walking")
     args = parser.parse_args()
@@ -91,14 +97,15 @@ def main():
         attractions = [place_to_attraction(by_id[i]) for i in ids if i in by_id]
 
         print(f"\nPlanning {len(attractions)} attractions over {args.days} day(s)  ·  "
-              f"intensity={args.intensity}  start={args.start}  "
+              f"intensity={args.intensity}  {args.start}–{args.end}  "
               f"transport={args.transport}  break={args.brk}min")
 
-        plan = build_daily_itinerary(
+        plan = build_itinerary(
             attractions,
             num_days=args.days,
-            intensity=args.intensity,
-            start_time=args.start,
+            global_intensity=args.intensity,
+            global_start_time=args.start,
+            global_end_time=args.end,
             break_duration_minutes=args.brk,
             transport_mode=args.transport,
         )

@@ -4,11 +4,11 @@ import "leaflet/dist/leaflet.css";
 import { CATEGORIES } from "./constants";
 import {
   parseDurationToMinutes, formatMinutes,
-  buildDailyItinerary, computeDayItems, computeTravelMinutes, computeTravelKm,
+  computeDayItems, computeTravelMinutes, computeTravelKm,
   getTransportSpeed,
 } from "./utils";
 import { getDayScheduleValidation } from "./itineraryValidation";
-import { fetchPlaces, loadPreferences, savePreferences } from "./services/api";
+import { fetchPlaces, loadPreferences, savePreferences, planItinerary, finalizeItinerary } from "./services/api";
 import AttractionDetailsModal from "./components/AttractionDetailsModal";
 import HomePage from "./pages/HomePage";
 import ResultsPage from "./pages/ResultsPage";
@@ -35,8 +35,12 @@ function App() {
   const [intensity, setIntensity] = useState("moderate");
   const [startTime, setStartTime] = useState("09:00");
   const [transportMode, setTransportMode] = useState("walking");
+  const [endTime, setEndTime] = useState("21:00");
   const [itineraryDays, setItineraryDays] = useState(null);
+  const [isGeneratingItinerary, setIsGeneratingItinerary] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [scheduleNotice, setScheduleNotice] = useState("");
+  const [pins, setPins] = useState({});
 
   const retryLoadAttractions = useCallback(async () => {
     setIsLoadingAttractions(true);
@@ -97,7 +101,19 @@ function App() {
   const toggleAttraction = (attraction) => {
     setSelectedAttractions((prev) => {
       const exists = prev.some((a) => a.id === attraction.id);
+      if (exists) {
+        setPins((p) => { const next = { ...p }; delete next[attraction.id]; return next; });
+      }
       return exists ? prev.filter((a) => a.id !== attraction.id) : [...prev, attraction];
+    });
+  };
+
+  const pinAttraction = (attractionId, dayIndex) => {
+    setPins((prev) => {
+      if (prev[attractionId] === dayIndex) {
+        const next = { ...prev }; delete next[attractionId]; return next;
+      }
+      return { ...prev, [attractionId]: dayIndex };
     });
   };
 
@@ -148,16 +164,70 @@ function App() {
     }
   };
 
-  const generateItinerary = () => {
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, intensity, startTime, 30, transportMode));
+  const generateItinerary = async () => {
+    setIsGeneratingItinerary(true);
     setScheduleNotice("");
-    setPage("itinerary");
+    try {
+      const pinList = Object.entries(pins).map(([id, day]) => ({ place_id: Number(id), day }));
+      const result = await planItinerary({
+        place_ids: selectedAttractions.map((a) => a.id),
+        num_days: numDays,
+        intensity,
+        start_time: startTime,
+        end_time: endTime,
+        transport_mode: transportMode,
+        break_duration_minutes: 30,
+        selected_categories: selectedCategories,
+        pins: pinList.length ? pinList : undefined,
+      });
+      setItineraryDays(result);
+      setPage("itinerary");
+    } catch {
+      setScheduleNotice("Could not generate itinerary. Please check that the backend is running.");
+    } finally {
+      setIsGeneratingItinerary(false);
+    }
   };
 
-  const changeIntensity = (newIntensity) => {
+  const changeIntensity = async (newIntensity) => {
     setIntensity(newIntensity);
-    setItineraryDays(buildDailyItinerary(selectedAttractions, numDays, newIntensity, startTime, 30, transportMode));
+    try {
+      const result = await planItinerary({
+        place_ids: selectedAttractions.map((a) => a.id),
+        num_days: numDays,
+        intensity: newIntensity,
+        start_time: startTime,
+        end_time: endTime,
+        transport_mode: transportMode,
+        break_duration_minutes: 30,
+        selected_categories: selectedCategories,
+      });
+      setItineraryDays(result);
+      setScheduleNotice("");
+    } catch {
+      setScheduleNotice("Could not regenerate itinerary. Please check that the backend is running.");
+    }
+  };
+
+  const handleFinalizeItinerary = async () => {
+    if (!itineraryDays?.days?.length) return;
+    setIsFinalizing(true);
     setScheduleNotice("");
+    try {
+      const result = await finalizeItinerary({
+        days: itineraryDays.days.map((day) => ({
+          place_ids: day.attractions.map((a) => a.id),
+          start_time: startTime,
+          break_durations: day.breakDurations,
+        })),
+        transport_mode: transportMode,
+      });
+      setItineraryDays((prev) => ({ ...prev, days: result.days }));
+    } catch {
+      setScheduleNotice("Could not get exact times. Make sure the backend is running.");
+    } finally {
+      setIsFinalizing(false);
+    }
   };
 
   const buildUpdatedDay = (day, newAttractions, newBreakDurations) => {
@@ -174,6 +244,20 @@ function App() {
       items: newItems,
       totalMinutes: totalFromItems(newItems),
     };
+  };
+
+  const getBreakDurationsAfterAttractionRemoval = (day, attractionIndex) => {
+    if (day.attractions.length <= 1) return [];
+
+    const newBreakDurations = [...day.breakDurations];
+    if (attractionIndex === 0) {
+      newBreakDurations.splice(0, 1);
+    } else if (attractionIndex === day.attractions.length - 1) {
+      newBreakDurations.splice(attractionIndex - 1, 1);
+    } else {
+      newBreakDurations.splice(attractionIndex - 1, 2, null);
+    }
+    return newBreakDurations;
   };
 
   const applyDayUpdate = (dayIndex, updatedDay, actionLabel) => {
@@ -197,6 +281,44 @@ function App() {
     const day = itineraryDays?.days[dayIndex];
     if (!day) return;
 
+    if (dir === "prev-day" || dir === "next-day") {
+      const targetDayIndex = dir === "prev-day" ? dayIndex - 1 : dayIndex + 1;
+      const targetDay = itineraryDays?.days[targetDayIndex];
+      const attraction = day.attractions[attractionIndex];
+      if (!targetDay || !attraction) return;
+
+      const sourceAttractions = day.attractions.filter((_, index) => index !== attractionIndex);
+      const sourceBreakDurations = getBreakDurationsAfterAttractionRemoval(day, attractionIndex);
+      const targetAttractions = [...targetDay.attractions, attraction];
+      const targetBreakDurations = [...targetDay.breakDurations];
+      if (targetDay.attractions.length > 0) targetBreakDurations.push(null);
+
+      const updatedSourceDay = buildUpdatedDay(day, sourceAttractions, sourceBreakDurations);
+      const updatedTargetDay = buildUpdatedDay(targetDay, targetAttractions, targetBreakDurations);
+      const sourceValidation = getDayScheduleValidation(updatedSourceDay, intensity);
+      const targetValidation = getDayScheduleValidation(updatedTargetDay, intensity);
+
+      if (!sourceValidation.isValid || !targetValidation.isValid) {
+        const message = [...sourceValidation.blockers, ...targetValidation.blockers][0];
+        setScheduleNotice(`Move to day ${targetDayIndex + 1} was not applied: ${message}`);
+        return;
+      }
+
+      setScheduleNotice("");
+      setItineraryDays((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((currentDay, index) => {
+            if (index === dayIndex) return updatedSourceDay;
+            if (index === targetDayIndex) return updatedTargetDay;
+            return currentDay;
+          }),
+        };
+      });
+      return;
+    }
+
     const targetIndex = dir === "up" ? attractionIndex - 1 : attractionIndex + 1;
     if (targetIndex < 0 || targetIndex >= day.attractions.length) return;
 
@@ -216,14 +338,7 @@ function App() {
         const attrIndex = day.attractions.findIndex((a) => a.id === attractionId);
         if (attrIndex === -1) return day;
         const newAttractions = day.attractions.filter((a) => a.id !== attractionId);
-        const newBreakDurations = [...day.breakDurations];
-        if (attrIndex === 0) {
-          newBreakDurations.splice(0, 1);
-        } else if (attrIndex === day.attractions.length - 1) {
-          newBreakDurations.splice(attrIndex - 1, 1);
-        } else {
-          newBreakDurations.splice(attrIndex - 1, 2, null);
-        }
+        const newBreakDurations = getBreakDurationsAfterAttractionRemoval(day, attrIndex);
         const speed = getTransportSpeed(transportMode);
         const newTravelMinutes = computeTravelMinutes(newAttractions, speed);
         const newTravelKm = computeTravelKm(newAttractions);
@@ -293,12 +408,14 @@ function App() {
           departureDate={departureDate}
           intensity={intensity}
           startTime={startTime}
+          endTime={endTime}
           selectedCategories={selectedCategories}
           allCategoriesSelected={allCategoriesSelected}
           onArrivalDateChange={setArrivalDate}
           onNumDaysChange={setNumDays}
           onIntensityChange={setIntensity}
           onStartTimeChange={setStartTime}
+          onEndTimeChange={setEndTime}
           transportMode={transportMode}
           onTransportModeChange={setTransportMode}
           onToggleCategory={toggleCategory}
@@ -325,6 +442,10 @@ function App() {
           onShowAttractionDetails={setSelectedAttractionDetails}
           onBack={() => setPage("home")}
           onGenerateItinerary={generateItinerary}
+          isGeneratingItinerary={isGeneratingItinerary}
+          pins={pins}
+          numDays={numDays}
+          onPinAttraction={pinAttraction}
         />
       )}
 
@@ -342,6 +463,8 @@ function App() {
           scheduleNotice={scheduleNotice}
           onChangeIntensity={changeIntensity}
           onRegenerate={generateItinerary}
+          onFinalizeItinerary={handleFinalizeItinerary}
+          isFinalizing={isFinalizing}
           onMoveAttraction={moveAttractionInDay}
           onRemoveAttraction={removeFromItinerary}
           onAddBreak={addBreak}

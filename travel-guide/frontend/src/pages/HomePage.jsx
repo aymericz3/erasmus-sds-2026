@@ -2,9 +2,9 @@ import PreferencesPanel from "../components/PreferencesPanel";
 
 export default function HomePage({
   arrivalDate, numDays, departureDate,
-  intensity, startTime, transportMode, selectedCategories, allCategoriesSelected,
+  intensity, startTime, endTime, transportMode, selectedCategories, allCategoriesSelected,
   preferenceStatus,
-  onArrivalDateChange, onNumDaysChange, onIntensityChange, onStartTimeChange,
+  onArrivalDateChange, onNumDaysChange, onIntensityChange, onStartTimeChange, onEndTimeChange,
   onTransportModeChange, onToggleCategory, onToggleAllCategories,
   onSavePreferences, onLoadPreferences, onExplore,
 }) {
@@ -23,6 +23,7 @@ export default function HomePage({
         departureDate={departureDate}
         intensity={intensity}
         startTime={startTime}
+        endTime={endTime}
         transportMode={transportMode}
         selectedCategories={selectedCategories}
         allCategoriesSelected={allCategoriesSelected}
@@ -31,6 +32,7 @@ export default function HomePage({
         onNumDaysChange={onNumDaysChange}
         onIntensityChange={onIntensityChange}
         onStartTimeChange={onStartTimeChange}
+        onEndTimeChange={onEndTimeChange}
         onTransportModeChange={onTransportModeChange}
         onToggleCategory={onToggleCategory}
         onToggleAllCategories={onToggleAllCategories}

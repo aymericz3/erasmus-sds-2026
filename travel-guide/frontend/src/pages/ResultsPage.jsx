@@ -12,7 +12,8 @@ export default function ResultsPage({
   attractions, selectedAttractions, selectedCategories, allCategoriesSelected,
   isLoadingAttractions, attractionsError,
   onRetryAttractions, onToggleAttraction, onToggleCategory, onToggleAllCategories,
-  onShowAttractionDetails, onBack, onGenerateItinerary,
+  onShowAttractionDetails, onBack, onGenerateItinerary, isGeneratingItinerary,
+  pins, numDays, onPinAttraction,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -35,10 +36,10 @@ export default function ResultsPage({
         </div>
         <button
           className="primary"
-          disabled={selectedAttractions.length === 0}
+          disabled={selectedAttractions.length === 0 || isGeneratingItinerary}
           onClick={onGenerateItinerary}
         >
-          Generate Itinerary
+          {isGeneratingItinerary ? "Planning…" : "Generate Itinerary"}
         </button>
       </div>
 
@@ -133,6 +134,21 @@ export default function ResultsPage({
                       {isSelected ? "Selected" : "Select"}
                     </button>
                   </div>
+                  {isSelected && numDays > 1 && (
+                    <div className="pin-row" onClick={(e) => e.stopPropagation()}>
+                      <span className="pin-label">📌 Pin to day:</span>
+                      {Array.from({ length: numDays }, (_, i) => (
+                        <button
+                          key={i}
+                          className={`pin-day-btn${pins?.[attraction.id] === i ? " active" : ""}`}
+                          onClick={() => onPinAttraction(attraction.id, i)}
+                          title={`Pin to Day ${i + 1}`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );

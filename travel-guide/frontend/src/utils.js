@@ -1,4 +1,4 @@
-import { INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "./constants";
+import { TRANSPORT_OPTIONS } from "./constants";
 import L from "leaflet";
 
 export function parseDurationToMinutes(duration) {
@@ -82,7 +82,14 @@ export function computeTravelKm(attractions) {
   });
 }
 
+function padTravel(minutes) {
+  if (minutes <= 0) return 0;
+  return Math.ceil(minutes / 10) * 10;
+}
+
 // Builds the flat items list for one day, inserting travel and break rows.
+// Travel item 'duration' is rounded up to the nearest 10 min (schedule leeway).
+// The raw travel time is preserved as 'actualMinutes' for display.
 export function computeDayItems(attractions, travelMinutes, breakDurations, startTime, travelKm = []) {
   const rawItems = [];
   attractions.forEach((attr, i) => {
@@ -92,7 +99,8 @@ export function computeDayItems(attractions, travelMinutes, breakDurations, star
       rawItems.push({
         type: "travel",
         id: `travel-${attr.id}`,
-        duration: travel,
+        duration: padTravel(travel),
+        actualMinutes: travel,
         gapIndex: i,
         distanceKm: travelKm[i] ?? null,
       });
@@ -107,69 +115,6 @@ export function computeDayItems(attractions, travelMinutes, breakDurations, star
 
 export function getTransportSpeed(transportMode) {
   return TRANSPORT_OPTIONS.find((o) => o.key === transportMode)?.speedKmh ?? 5;
-}
-
-export function buildDailyItinerary(
-  attractions,
-  numDays,
-  intensityKey,
-  startTime = "09:00",
-  breakDurationMinutes = 30,
-  transportMode = "walking"
-) {
-  const config = INTENSITY_OPTIONS.find((o) => o.key === intensityKey);
-  const maxMinPerDay = config.maxMinutesPerDay;
-  const isRelaxed = intensityKey === "relaxed";
-  const speedKmh = getTransportSpeed(transportMode);
-
-  const days = Array.from({ length: numDays }, () => ({
-    attractions: [],
-    travelMinutes: [],
-    travelKm: [],
-    breakDurations: [],
-    items: [],
-    totalMinutes: 0,
-  }));
-  const overflow = [];
-
-  for (const attraction of attractions) {
-    const duration = parseDurationToMinutes(attraction.duration);
-
-    const dayIndex = days.findIndex((day) => {
-      const last = day.attractions[day.attractions.length - 1];
-      const travel = last ? haversineMinutes(last, attraction, speedKmh) : 0;
-      const breakOverhead = isRelaxed && day.attractions.length > 0 ? breakDurationMinutes : 0;
-      return (
-        day.totalMinutes + travel + breakOverhead + duration <= maxMinPerDay &&
-        (config.maxAttractionsPerDay === null || day.attractions.length < config.maxAttractionsPerDay)
-      );
-    });
-
-    if (dayIndex !== -1) {
-      const day = days[dayIndex];
-      if (day.attractions.length > 0) {
-        const last = day.attractions[day.attractions.length - 1];
-        const travel = haversineMinutes(last, attraction, speedKmh);
-        const km = haversineKm(last, attraction);
-        day.travelMinutes.push(travel);
-        day.travelKm.push(km !== null ? Math.round(km * 100) / 100 : null);
-        day.totalMinutes += travel;
-        day.breakDurations.push(isRelaxed ? breakDurationMinutes : null);
-        if (isRelaxed) day.totalMinutes += breakDurationMinutes;
-      }
-      day.attractions.push(attraction);
-      day.totalMinutes += duration;
-    } else {
-      overflow.push(attraction);
-    }
-  }
-
-  const daysWithItems = days.map((day) => ({
-    ...day,
-    items: computeDayItems(day.attractions, day.travelMinutes, day.breakDurations, startTime, day.travelKm),
-  }));
-
-  return { days: daysWithItems, overflow };
 }
 
 export function createMarkerIcon(color, label) {
