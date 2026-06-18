@@ -278,3 +278,21 @@ def build_daily_itinerary(
         )
 
     return {"days": days, "overflow": overflow}
+
+def filter_places_by_preferences(places: list, budget: str, selected_categories: list) -> list:
+    filtered = []
+    budget_mapping = {
+        "low": ["low", "$"],
+        "moderate": ["low", "moderate", "$", "$$"],
+        "high": ["low", "moderate", "high", "$", "$$", "$$$"]
+    }
+    allowed_budgets = budget_mapping.get(budget, ["low", "moderate", "$", "$$"])
+    
+    for place in places:
+        if selected_categories and place.category not in selected_categories:
+            continue
+        if place.price_range and place.price_range not in allowed_budgets:
+            continue
+        filtered.append(place)
+        
+    return filtered

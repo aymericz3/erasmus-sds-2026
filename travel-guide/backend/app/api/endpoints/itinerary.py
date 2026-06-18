@@ -8,6 +8,7 @@ from app.services.planner_service import (
     build_daily_itinerary,
     place_to_attraction,
     rank_attractions,
+    filter_places_by_preferences,
 )
 
 router = APIRouter()
@@ -19,8 +20,11 @@ async def create_plan(request: ItineraryRequest, db: Session = Depends(get_db)):
     if not places:
         raise HTTPException(status_code=404, detail="No places found for given IDs")
     
+    budget_val = getattr(request, "budget", "moderate")
     categories = getattr(request, "selected_categories", [])
-    ranked_places = rank_attractions(places, categories)
+    
+    filtered_places = filter_places_by_preferences(places, budget_val, categories)
+    ranked_places = rank_attractions(filtered_places, categories)
 
     items = schedule_itinerary(
         ranked_places,
@@ -42,17 +46,17 @@ async def create_plan(request: ItineraryRequest, db: Session = Depends(get_db)):
 
 @router.post("/generate")
 async def generate_itinerary(request: ItineraryPlanRequest, db: Session = Depends(get_db)):
-    """
-    Build a full multi-day itinerary (clock times, travel, breaks, overflow).
-    place_ids order is preserved so the greedy packer respects the user's selection.
-    """
     places = db.query(Place).filter(Place.id.in_(request.place_ids)).all()
 
     if not places:
         raise HTTPException(status_code=404, detail="No places found for given IDs")
 
-    # Preserve the order the client sent, since packing is order-sensitive.
-    by_id = {p.id: p for p in places}
+    budget_val = getattr(request, "budget", "moderate")
+    categories = getattr(request, "selected_categories", [])
+    
+    filtered_places = filter_places_by_preferences(places, budget_val, categories)
+
+    by_id = {p.id: p for p in filtered_places}
     attractions = [place_to_attraction(by_id[pid]) for pid in request.place_ids if pid in by_id]
 
     return build_daily_itinerary(

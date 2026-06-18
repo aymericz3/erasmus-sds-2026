@@ -16,4 +16,8 @@ class ItineraryPlanRequest(BaseModel):
     intensity: str = "moderate"
     start_time: str = "09:00"
     break_duration_minutes: int = 30
+    budget: str = "moderate"
+    selected_categories: List[str] = []
     transport_mode: str = "walking"
+    budget: str = "moderate"
+    selected_categories: List[str] = []
