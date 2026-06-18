@@ -1,4 +1,4 @@
-import { INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "../constants";
+import { DAY_COLORS, INTENSITY_OPTIONS, TRANSPORT_OPTIONS } from "../constants";
 import { getItineraryScheduleValidation } from "../itineraryValidation";
 import { formatMinutes, formatDayDate } from "../utils";
 import ItineraryMap from "../components/ItineraryMap";
@@ -85,11 +85,13 @@ export default function ItineraryPage({
       {days.map((day, dayIndex) => {
         let attrCounter = 0;
         const dayValidation = scheduleValidation.dayValidations[dayIndex];
+        const dayColor = DAY_COLORS[dayIndex % DAY_COLORS.length];
 
         return (
-          <div key={dayIndex} className="day-block">
+          <div key={dayIndex} className="day-block" style={{ "--day-color": dayColor }}>
             <div className="day-header">
               <h2>
+                <span className="day-color-dot" aria-hidden="true" />
                 Day {dayIndex + 1}
                 {arrivalDate && (
                   <span className="day-date"> — {formatDayDate(arrivalDate, dayIndex)}</span>
@@ -228,6 +230,12 @@ export default function ItineraryPage({
                         )}
                         <div className="reorder-btns">
                           <button
+                            className="reorder-btn day-move-btn"
+                            onClick={() => onMoveAttraction(dayIndex, currentAttrIndex, "prev-day")}
+                            disabled={dayIndex === 0}
+                            title="Move to previous day"
+                          >D-</button>
+                          <button
                             className="reorder-btn"
                             onClick={() => onMoveAttraction(dayIndex, currentAttrIndex, "up")}
                             disabled={isFirstAttr}
@@ -239,6 +247,12 @@ export default function ItineraryPage({
                             disabled={isLastAttr}
                             title="Move down"
                           >↓</button>
+                          <button
+                            className="reorder-btn day-move-btn"
+                            onClick={() => onMoveAttraction(dayIndex, currentAttrIndex, "next-day")}
+                            disabled={dayIndex === days.length - 1}
+                            title="Move to next day"
+                          >D+</button>
                         </div>
                         <button
                           className="remove-btn"

@@ -393,6 +393,14 @@ h1 {
   cursor: not-allowed;
 }
 
+.day-move-btn {
+  width: 34px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
 .remove-btn {
   width: 28px;
   height: 28px;
@@ -705,6 +713,7 @@ h1 {
 .day-block {
   margin-bottom: 32px;
   border: 1px solid #ddd;
+  border-top: 4px solid var(--day-color, #ddd);
   border-radius: 18px;
   overflow: hidden;
 }
@@ -716,11 +725,24 @@ h1 {
   padding: 20px 24px;
   background: #f7f7f8;
   border-bottom: 1px solid #ddd;
+  box-shadow: inset 6px 0 0 var(--day-color, #ddd);
 }
 
 .day-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   font-size: 20px;
+}
+
+.day-color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--day-color, #ddd);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
 }
 
 .day-date {
