@@ -11,6 +11,7 @@ build_itinerary and the /finalize endpoint.
 """
 
 import math
+import random
 import re
 
 from app.core.planning_config import get_intensity_config, get_transport_speed, get_min_rest_minutes
@@ -337,12 +338,17 @@ def _nearest_neighbour(
     attractions: list[dict],
     start_anchor,
     cache: dict | None = None,
+    alpha: float = 0.0,
 ) -> list[dict]:
     """
     Greedy nearest-neighbour ordering starting from start_anchor.
-    At each step, pick the unvisited attraction closest (in km) to the current
-    position. Speed is not needed here — all legs share the same speed so
-    closest km == closest time. Uses dist_cache for attraction-to-attraction lookups.
+
+    alpha = 0.0 → deterministic: always pick the single closest attraction.
+    alpha > 0.0 → GRASP-style: build a Restricted Candidate List of all
+    unvisited attractions within (1 + alpha) × best_distance, cap it at 4,
+    then pick one at random. Produces varied but still near-optimal routes —
+    useful when the caller wants a different route on each invocation
+    (e.g. the "Regenerate" button).
     """
     if not attractions:
         return []
@@ -352,12 +358,19 @@ def _nearest_neighbour(
     current   = start_anchor
 
     while unvisited:
-        nearest = min(unvisited, key=lambda a: (
-            _km_cached(current, a, cache) or _haversine_km(current, a) or 0
-        ))
-        ordered.append(nearest)
-        unvisited.remove(nearest)
-        current = nearest
+        dist_fn     = lambda a: _km_cached(current, a, cache) or _haversine_km(current, a) or 0
+        best_dist   = min(dist_fn(a) for a in unvisited)
+
+        if alpha > 0.0:
+            threshold = best_dist * (1 + alpha)
+            rcl       = [a for a in unvisited if dist_fn(a) <= threshold][:4]
+            chosen    = random.choice(rcl)
+        else:
+            chosen    = min(unvisited, key=dist_fn)
+
+        ordered.append(chosen)
+        unvisited.remove(chosen)
+        current = chosen
 
     return ordered
 
@@ -400,15 +413,17 @@ def _optimise_day_order(
     end_anchor,
     speed: int,
     cache: dict | None = None,
+    alpha: float = 0.0,
 ) -> list[dict]:
     """
     Return attractions in the optimised visiting order for one day.
     Runs nearest-neighbour first (fast, good starting point), then 2-opt
-    (removes route crossings). Both respect the start and end anchors.
+    (removes crossings). alpha > 0 enables GRASP randomisation in the
+    nearest-neighbour phase so repeated calls produce different routes.
     """
     if len(attractions) <= 1:
         return attractions
-    ordered = _nearest_neighbour(attractions, start_anchor, cache)
+    ordered = _nearest_neighbour(attractions, start_anchor, cache, alpha)
     return _two_opt(ordered, start_anchor, end_anchor, speed, cache)
 
 
@@ -530,6 +545,7 @@ def build_itinerary(
     days_config: list | None = None,
     pins: list | None = None,
     selected_categories: list | None = None,
+    randomness: float = 0.0,
 ) -> dict:
     """
     Greedy multi-day packer with route optimisation and per-day configuration.
@@ -669,6 +685,7 @@ def build_itinerary(
                 anchors[i]["end"],
                 speed,
                 dist_cache,
+                randomness,
             )
 
         # Recompute travel and break arrays from the optimised order.

@@ -44,6 +44,11 @@ class ItineraryRequest(BaseModel):
     # User's preferred categories — attractions in these categories are packed first
     # so they survive the overflow cut when the time budget is tight.
     selected_categories: Optional[List[str]] = None
+    # GRASP randomness factor (α). 0.0 = fully deterministic (always picks the
+    # nearest attraction). 0.3 = any attraction within 30% of the nearest distance
+    # is a candidate; one is picked at random. Capped at 4 candidates per step.
+    # Regenerating with the same attractions produces a different route each time.
+    randomness: float = 0.5
 
 
 # ---------------------------------------------------------------------------
