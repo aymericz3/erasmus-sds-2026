@@ -58,6 +58,7 @@ export function planItinerary({
   transport_mode = "walking",
   break_duration_minutes = 30,
   selected_categories = [],
+  randomness = 0.3,
 }) {
   return request("/itinerary/plan", {
     method: "POST",
@@ -70,6 +71,7 @@ export function planItinerary({
       transport_mode,
       break_duration_minutes,
       selected_categories,
+      randomness,
     }),
   });
 }

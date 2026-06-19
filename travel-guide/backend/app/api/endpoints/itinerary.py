@@ -48,6 +48,7 @@ async def plan_itinerary(request: ItineraryRequest, db: Session = Depends(get_db
         days_config=days_config,
         pins=pins,
         selected_categories=request.selected_categories,
+        randomness=request.randomness,
     )
 
 
